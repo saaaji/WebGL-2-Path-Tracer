@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title id='title'>Hydra</title>
+    <link rel='stylesheet' type='text/css' href='./css/hydra.css'/>
+  </head>
+  <body>
+    <div class='container'>
+      <div class='panel-col' id='input'>
+        <div class='panel input-panel' id='config'>
+          <!--Choose Input scene-->
+          <div class='input-row'>
+            <label>Choose Scene (.HYDRA)</label>
+            <input id='choose-hydra-scene' type='file'/>
+          </div>
+          <!--Specify width of canvas-->
+          <div class='input-row'>
+            <label>Set width</label>
+            <input id='image-width' type='number' value='500' min='1'/>
+          </div>
+          <!--Specify height of canvas-->
+          <div class='input-row'>
+            <label>Set height</label>
+            <input id='image-height' type='number' value='500' min='1'/>
+          </div>
+          <!--Specify X work groups-->
+          <div class='input-row'>
+            <label>Horizontal work groups</label>
+            <input id='horizontal-work-groups' type='number' value='5' min='1'/>
+          </div>
+          <!--Specify Y work groups-->
+          <div class='input-row'>
+            <label>Vertical work groups</label>
+            <input id='vertical-work-groups' type='number' value='5' min='1'/>
+          </div>
+          <input type='button' disabled value='Render' id='render-scene' class='submit'>
+        </div>
+        <div class='panel input-panel' id='export'>
+          <div class='input-row'>
+            <label>Choose Scene (.GLB)</label>
+            <input id='choose-glb-scene' type='file'/>
+          </div>
+          <input type='button' disabled value='Export' id='export-scene' class='submit'>
+        </div>
+      </div>
+      <div class='panel-col' id='visuals'>
+        <div class='panel visual' id='render'>
+          <canvas id='canvas'>Canvas is not supported</canvas>
+          <div id='controls'>
+            <input id='pause-render' type='image' width='25' height='25' title='Pause' src='./assets/images/pause.png'/>
+            <input id='save-frame' type='image' width='25' height='25' title='Download' src='./assets/images/download.png'/>
+          </div>
+        </div>
+        <div class='panel visual' id='downloads'></div>
+      </div>
+    </div>
+    <script type='module' src='./js/index.js'></script>
+  </body>
+</html>
