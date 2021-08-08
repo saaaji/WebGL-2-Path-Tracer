@@ -4,7 +4,7 @@ const shaderModules = new Map();
 
 export async function loadShaderModule(fileName) {
   if (HOT_RELOAD || !shaderModules.has(fileName)) {
-    const source = await fetch('../assets/shaders/' + fileName).then(response => response.text());
+    const source = await fetch('../../assets/shaders/' + fileName).then(response => response.text());
     shaderModules.set(fileName, source);
   }
 }
