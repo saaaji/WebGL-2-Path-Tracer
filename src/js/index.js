@@ -43,7 +43,7 @@ let sampleCountThreshold = 1;
 // event listeners
 $('pause-render').addEventListener('click', function(event) {
   flags ^= PAUSED_FLAG;
-  event.target.src = flags & PAUSED_FLAG ? '../assets/images/play.png' : '../assets/images/pause.png';
+  event.target.src = flags & PAUSED_FLAG ? './assets/images/play.png' : './assets/images/pause.png';
 });
 
 $('save-frame').addEventListener('click', function(event) {
