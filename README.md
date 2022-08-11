@@ -19,10 +19,11 @@ This project began as an implementation of *Ray Tracing in One Weekend*; I envis
 ### Evolution of the Bounding Volume Hierarchy
 The first modification I made to the base renderer of *RTIOW* was the addition of an acceleration structure, particularly a bounding volume hierarchy, as I realized intersection times would serve as the primary limiting factor on the spectacle of my renders--and it has since become the system that has undergone the most changes over the entire development period.
 #### 1. Traversing a binary BVH in a fragment shader
-||R|G|B|A|
-|-|-|-|-|-|-|-|-|-|
-|0|`min.x`|`min.y`|`min.z`|`rightChildIndex`|
-|1|`max.x`|`max.y`|`max.z`|`primitiveId`|
+|Texel Index|R|G|B|A|
+|:-:|:-:|:-:|:-:|:-:|
+|n|`min.x`|`min.y`|`min.z`|`rightChildIndex`|
+|n + 1|`max.x`|`max.y`|`max.z`|`primitiveId`|
+
 Given that all my WebGL knowledge was sourced from *webgl2fundamentals*, the task of traversing a binary tree in a fragment shader was initially very daunting. Firstly, achieving this requires treating textures as arbitrary buffers (a concept which was then a novelty to me) via macros that allow for indexing into a texture as though it were a 1D array of texels. A binary BVH can then be flattened, and given the need to encode an AABB (min/max `vec3`'s require 3 channels each), 2 floating-point RGBA texels (`RGBA16F`/`RGBA32F`) are required per node at a minimum, with 2 channels remaining for child offsets or primitive IDs. One channel is reserved for the offset ("pointer") to the "right" child; since nodes are arranged according to depth-first order, the "left" child immediately follows its parent, making it possible to store just a singular offset. Thus the primitive ID is assigned to the final channel. This linear representation dictates an iterative traversal algorithm (recursion is disallowed in GLSL shaders regardless), which resembles the typical stack-based, depth-first BST traversal scheme. BVH construction was comparatively simple, though I implemented the Surface Area Heuristic (SAH), using *PBRT* as a reference, to create relatively high-quality trees.
 #### 2. First optimizations--stackless traversal
 The above implementation would have remained unchanged had I not come across the following diagram on discord (recreation):
