@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>WGLRT</title>
+    <link rel='stylesheet' type='text/css' href='./css/hydra_scene_exporter.css'/>
+    <!--Import tree viewer element for scene graph-->
+    <script src='./js/utilities/TreeViewer.js' type='module'></script>
+  </head>
+  <body>
+    <div id='ui-container'>
+      <div class='ui-column'>
+        <div class='ui-section'>
+          <div class='ui-section-title'>Render Settings</div>
+          <div class='ui-section-content'>
+            <div class='ui-content-row'>
+              <label for='import-scene'>Choose scene (<span class='mono-label'>.hydra</span>)</label>
+              <input id='import-scene' type='file' accept='.hydra'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='choose-hdri'>Choose environment map (<span class='mono-label'>HDRi</span>)</label>
+              <input id='choose-hdri' type='file' accept='.hdr'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='viewport-width'>Viewport width</label>
+              <input id='viewport-width' type='number' value='512'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='viewport-height'>Viewport height</label>
+              <input id='viewport-height' type='number' value='512'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='tile-count-x'>Horizontal tile count</label>
+              <input id='tile-count-x' type='number' value='8'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='tile-count-y'>Vertical tile count</label>
+              <input id='tile-count-y' type='number' value='8'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='emissive-factor'>Emissive factor</label>
+              <input id='emissive-factor' type='number' value='1'/>
+            </div>
+            <div class='ui-content-row'>
+              <input id='reload-shaders' type='button' value='Reload Shaders'/>
+            </div>
+            <div class='ui-content-row'>
+              <input id='render' type='button' value='Render'/>
+            </div>
+          </div>
+        </div>
+        <div class='ui-section'>
+          <div class='ui-section-title'>Export Settings</div>
+          <div class='ui-section-content'>
+            <div class='ui-content-row'>
+              <label for='export-scene'>Choose scene (<span class='mono-label'>.glb</span>)</label>
+              <input id='export-scene' type='file' accept='.glb'/>
+            </div>
+            <div class='ui-content-row'>
+              <input id='export' type='button' value='Export'/>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class='ui-column'>
+        <div class='ui-section'>
+          <div class='ui-section-title'>Viewport</div>
+          <div class='ui-section-content' id='viewport-container'>
+            <canvas id='hydra-canvas' width='512' height='512' style='background-color:black;'></canvas>
+            <div id='viewport-controls'>
+              <input id='pause' type='image' width='20' height='20' title='Pause' src='./assets/images/pause.png'/>
+              <input id='save' type='image' width='20' height='20' title='Download' src='./assets/images/download.png'/>
+            </div>
+          </div>
+        </div>
+        <div class='ui-section' id='console-container'>
+          <div class='ui-section-title'>Console</div>
+          <div class='ui-section-content empty' id='console-output-container'>
+            No Messages
+            <!-- Example Message Formatting:
+            <div class='console-output-row'>
+              <div class='console-output-row-timestamp'>...</div>
+              <div class='console-output-row-message'>...</div>
+            </div>
+            -->
+          </div>
+        </div>
+      </div>
+      <div class='ui-column'>
+        <div class='ui-section' id='node-tree-container'>
+          <div class='ui-section-title'>Node Tree</div>
+          <div class='ui-section-content' id='tree-viewer-container'>
+            <tree-viewer id='tree-viewer'></tree-viewer>
+          </div>
+        </div>
+        <div class='ui-section'>
+          <div class='ui-section-title'>Active Node</div>
+          <div class='ui-section-content empty' id='active-node-container'>
+            No Selection
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src='./js/index_test.js' type='module'></script>
+  </body>
+</html>

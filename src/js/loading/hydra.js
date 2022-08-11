@@ -1,24 +1,36 @@
-import { BVH } from '../accel/BVHNode.js';
-import { decodeGlb } from './decodeGlb.js';
+import { GlbLoader } from './GlbLoader.js';
 import { Triangle } from '../utilities/primitives.js';
-import { GL_CTX, TextureAtlasBuilder, UboBuilder, assert } from '../utilities/util.js';
+import { BinaryBVH } from '../accel/BVHNode.js';
+import { TextureAtlasBuilder } from '../utilities/TextureAtlasBuilder.js';
+import { GL_CTX, UboBuilder, assert, createEnum } from '../utilities/util.js';
 
 const hex = n => '0x' + n.toString(16).toUpperCase();
-  
+
 const MAGIC = createMagic('HYDRA');
 const JSON_MAGIC = createMagic('JSON');
 const BIN_MAGIC = createMagic('BIN');
 const LITTLE_ENDIAN = true;
 
 const HEADER_SIZE = 8;
-const VERSION = 7;
+const VERSION = 10;
 const TEXTURE_ATLAS_SIZE = 2048;
 
-const DATA_TYPE = {
-  float16: Symbol(),
-  float32: Symbol(),
-  int32: Symbol(),
-};
+export const NUM_LIGHTS = 33;
+export const NUM_MATERIALS = 32;
+export const NUM_TEXTURES = 32;
+export const NUM_BLAS = 32;
+
+// bytes
+const SIZEOF_LIGHT = 16;
+const SIZEOF_MATERIAL = 48;
+const SIZEOF_TEXTURE = 32;
+
+const DataType = createEnum(
+  'Float16',
+  'Float32',
+  'Int32',
+  'Uint32',
+);
 
 class BufferViewManager {
   constructor() {
@@ -45,35 +57,27 @@ class BufferViewManager {
 
 // create binary .hydra asset
 export async function encodeHydra(fileList) {
+  const file = fileList.item(0);
+  const loader = new GlbLoader();
   const state = new BufferViewManager();
   
   const {
-    indices,
-    vertices,
-    texCoords,
-    normals,
-    materials,
     images,
-    camera,
-  } = await decodeGlb(fileList);
-  
-  // generate triangles from global vertex and face lists
-  const triangles = [];
-  for (let i = 0; i < indices.length / 4; i++) {
-    triangles.push(new Triangle(i, indices, vertices));
-  }
-  
-  const bvh = new BVH(triangles);
-  
-  // bvh.serialize_DEBUG();
+    materials,
+    emissivePrimitives: lights,
+    meshDescriptors,
+    indices,
+    vertexAttribs,
+    root,
+  } = await loader.parse(file);
   
   // encode texture data
   const dataTextures = createDataTextureBuffer([
-    {name: 'ACCEL',    dataType: DATA_TYPE.float32, numComponents: 4, data: bvh.serialize()},
-    {name: 'FACE',     dataType: DATA_TYPE.int32,   numComponents: 4, data: indices},
-    {name: 'VERTEX',   dataType: DATA_TYPE.float32, numComponents: 3, data: vertices},
-    {name: 'NORMAL',   dataType: DATA_TYPE.float32, numComponents: 3, data: normals},
-    {name: 'TEXCOORD', dataType: DATA_TYPE.float32, numComponents: 2, data: texCoords},
+    {name: 'FACE',     dataType: DataType.Int32,    numComponents: 3, data: indices},
+    {name: 'VERTEX',   dataType: DataType.Float32,  numComponents: 3, data: vertexAttribs.position},
+    {name: 'NORMAL',   dataType: DataType.Float32,  numComponents: 3, data: vertexAttribs.normal},
+    {name: 'TEXCOORD', dataType: DataType.Float32,  numComponents: 2, data: vertexAttribs.texCoord0},
+    {name: 'MATERIAL', dataType: DataType.Int32,    numComponents: 1, data: vertexAttribs.materials},
   ], state);
   
   const textureDescriptors = [];
@@ -82,40 +86,65 @@ export async function encodeHydra(fileList) {
   const uniformBuffers = createUniformBuffers([
     {
       name: 'Materials',
-      data: materials,
-      capacity: 32 * 32,
-      callback: ({emissiveFactor, baseColorTexture, metallicRoughnessTexture}, builder) => {
-        builder.beginStruct();
-        builder.pushFloats(...emissiveFactor);
-        builder.pushInts(baseColorTexture);
-        builder.pushInts(metallicRoughnessTexture);
+      capacity: NUM_MATERIALS * SIZEOF_MATERIAL,
+      populate: builder => {
+        for (const {emissiveFactor, baseColorFactor, metallicFactor, roughnessFactor, baseColorTexture, metallicRoughnessTexture} of materials) {
+          builder.beginStruct();
+          builder.pushFloats(...emissiveFactor);
+          builder.pushFloats(...baseColorFactor);
+          builder.pushFloats(metallicFactor);
+          builder.pushFloats(roughnessFactor);
+          builder.pushInts(baseColorTexture);
+          builder.pushInts(metallicRoughnessTexture);
+        }
       },
     },
     {
       name: 'TextureDescriptors',
-      data: textureDescriptors,
-      capacity: 32 * 32,
-      callback: ({section, x, y, width, height}, builder) => {
-        builder.beginStruct();
+      capacity: NUM_TEXTURES * SIZEOF_TEXTURE,
+      populate: builder => {
+        for (const {section, x, y, width, height} of textureDescriptors) {
+          builder.beginStruct();
+          builder.pushFloats(section);
+          builder.pushFloats(x, y);
+          builder.pushFloats(width, height);
+        }
+      },
+    },
+    {
+      name: 'Lights',
+      capacity: NUM_LIGHTS * SIZEOF_LIGHT,
+      populate: builder => {
+        builder.pushInts(lights.length);
         
-        console.log(section, x, y, width, height);
-        builder.pushFloats(section);
-        builder.pushFloats(x, y);
-        builder.pushFloats(width, height);
+        for (const {id, blasIndex} of lights) {
+          builder.beginStruct();
+          builder.pushInts(id);
+          builder.pushInts(blasIndex);
+        }
       },
     },
   ], state);
   
+  const objectAccelStructs = createObjectAccelStructs(meshDescriptors, vertexAttribs, indices, state);
+  
+  // create JSON buffer data
   const json = JSON.stringify({
     bufferViews: state.bufferViews,
     uniformBuffers,
     dataTextures,
     atlas,
-    camera,
+    meshDescriptors,
+    objectAccelStructs,
+    tree: root.serialize(),
   });
   
   const jsonBuffer = new TextEncoder().encode(json);
   
+  /**
+   * pack data into binary blob
+   * order: primary header, JSON header, JSON buffer, BIN header, BIN buffer
+   */
   const blob = new Blob([
     createHeader(MAGIC, VERSION),
     createHeader(JSON_MAGIC, jsonBuffer.byteLength),
@@ -146,6 +175,7 @@ function createDataTextureBuffer(dataTextureInfo, state) {
       type,
       format,
       internalFormat,
+      numComponents,
       width: size,
       height: size,
       offset: currentOffset,
@@ -166,7 +196,9 @@ async function createTextureAtlas(images, textureDescriptors, state) {
     const textureDescriptor = atlasBuilder.insertImage(image);
     textureDescriptors.push(textureDescriptor);
   }
+  
   const blob = await atlasBuilder.buildAtlas();
+  
   return {
     bufferView: state.addBufferView(blob),
     mimeType: blob.type,
@@ -181,12 +213,9 @@ async function createTextureAtlas(images, textureDescriptors, state) {
 function createUniformBuffers(bufferDescriptors, state) {
   const uniformBuffers = [];
   
-  for (const {name, data, capacity, callback} of bufferDescriptors) {
+  for (const {name, capacity, populate} of bufferDescriptors) {
     const builder = new UboBuilder(capacity);
-    
-    for (const item of data) {
-      callback(item, builder);
-    }
+    populate(builder);
     
     const blob = new Blob([builder.rawBuffer]);
     
@@ -197,6 +226,32 @@ function createUniformBuffers(bufferDescriptors, state) {
   }
   
   return uniformBuffers;
+}
+
+function createObjectAccelStructs(meshDescriptors, vertexAttribs, indices, state) {
+  const objectAccelStructs = [];
+  
+  for (const {meshIndex, start, count} of meshDescriptors) {
+    // build triangle list
+    const triangles = [];
+    const triStartIndex = start / 3;
+    const triEndIndex = (start + count) / 3;
+    
+    for (let i = triStartIndex; i < triEndIndex; i++) {
+      triangles.push(new Triangle(i, indices, vertexAttribs.position));
+    }
+    
+    // build and serialize static hierarchy
+    const accelStruct = new BinaryBVH(triangles);
+    const data = new Blob([accelStruct._serialize()]);
+    
+    objectAccelStructs.push({
+      meshIndex,
+      bufferView: state.addBufferView(data),
+    });
+  }
+  
+  return objectAccelStructs;
 }
 
 function createHeader(magic, n) {
@@ -251,29 +306,44 @@ export async function decodeHydra(files) {
 }
 
 function getTextureFormatting(dataType, numComponents) {
-  const formatPrefix = 'RGBA'.slice(0, numComponents);
+  let formatPrefix = 'RGBA'.slice(0, numComponents);
+  let formatSuffix = '';
+  let internalFormatPrefix = formatPrefix;
+  let type, internalFormatSuffix;
   
-  let type, internalFormatSuffix, formatSuffix = '';
   switch (dataType) {
-    case DATA_TYPE.float16:
+    case DataType.Float16:
       internalFormatSuffix = '16F';
       type = 'HALF_FLOAT';
       break;
-    case DATA_TYPE.float32:
+    case DataType.Float32:
       internalFormatSuffix = '32F';
       type = 'FLOAT';
       break;
-    case DATA_TYPE.int32:
+    case DataType.Int32:
       internalFormatSuffix = '32I';
       formatSuffix = '_INTEGER';
       type = 'INT';
+      
+      if (numComponents === 1) {
+        formatPrefix = 'RED';
+      }
+      break;
+    case DataType.Uint32:
+      internalFormatSuffix = '32UI';
+      formatSuffix = '_INTEGER';
+      type = 'UNSIGNED_INT';
+      
+      if (numComponents === 1) {
+        formatPrefix = 'RED';
+      }
       break;
     default:
       throw new Error(`invalid data type '${dataType}'`);
   }
   
   const format = formatPrefix + formatSuffix;
-  const internalFormat = formatPrefix + internalFormatSuffix;
+  const internalFormat = internalFormatPrefix + internalFormatSuffix;
   
   return {
     type: GL_CTX[type],
@@ -284,12 +354,14 @@ function getTextureFormatting(dataType, numComponents) {
 
 function getTypedArrayConstructor(dataType) {
   switch (dataType) {
-    case DATA_TYPE.float16:
+    case DataType.Float16:
       return Uint16Array;
-    case DATA_TYPE.float32:
+    case DataType.Float32:
       return Float32Array;
-    case DATA_TYPE.int32:
+    case DataType.Int32:
       return Int32Array;
+    case DataType.Uint32:
+      return Uint32Array;
     default:
       throw new Error(`invalid data type '${dataType}'`);
   }

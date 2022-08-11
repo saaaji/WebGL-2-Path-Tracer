@@ -1,3 +1,5 @@
+import { ActiveNodeEditor } from '../utilities/ActiveNodeEditor.js';
+
 export class Vector3 {
   constructor(x = 0, y = 0, z = 0) {
     this.x = x;
@@ -10,6 +12,10 @@ export class Vector3 {
     this.y = array[offset + 1];
     this.z = array[offset + 2];
     return this;
+  }
+  
+  get isVector() {
+    return true;
   }
   
   get [0]() {
@@ -72,16 +78,16 @@ export class Vector3 {
   }
   
   min(v) {
-    this.x = Math.min(this.x, v.x);
-    this.y = Math.min(this.y, v.y);
-    this.z = Math.min(this.z, v.z);
+    this.x = Math.min(this.x, v[0]);
+    this.y = Math.min(this.y, v[1]);
+    this.z = Math.min(this.z, v[2]);
     return this;
   }
   
   max(v) {
-    this.x = Math.max(this.x, v.x);
-    this.y = Math.max(this.y, v.y);
-    this.z = Math.max(this.z, v.z);
+    this.x = Math.max(this.x, v[0]);
+    this.y = Math.max(this.y, v[1]);
+    this.z = Math.max(this.z, v[2]);
     return this;
   }
   
@@ -96,6 +102,20 @@ export class Vector3 {
     this.x = a.x + b.x;
     this.y = a.y + b.y;
     this.z = a.z + b.z;
+    return this;
+  }
+  
+  addScalar(s) {
+    this.x += s;
+    this.y += s;
+    this.z += s;
+    return this;
+  }
+  
+  componentWiseAddScalar(s0, s1, s2) {
+    this.x += s0;
+    this.y += s1;
+    this.z += s2;
     return this;
   }
   
@@ -123,16 +143,71 @@ export class Vector3 {
     return this;
   }
   
+  componentWiseScale(s0, s1, s2) {
+    this.x *= s0;
+    this.y *= s1;
+    this.z *= s2;
+    return this;
+  }
+  
   normalize() {
     const length = this.length;
     return this.scale(1 / length);
   }
   
+  crossVectors(a, b) {
+    const [aX, aY, aZ] = a;
+    const [bX, bY, bZ] = b;
+    
+    this.x = aY * bZ - aZ * bY;
+    this.y = aZ * bX - aX * bZ;
+    this.z = aX * bY - aY * bX;
+    
+    return this;
+  }
   
+  dot(b) {
+    const [aX, aY, aZ] = this;
+    const [bX, bY, bZ] = b;
+    
+    return aX * bX + aY * bY + aZ * bZ;
+  }
   
   *[Symbol.iterator]() {
     yield this.x;
     yield this.y;
     yield this.z;
+  }
+  
+  *[ActiveNodeEditor.createCustomDOM](mutable, displayName) {
+    const componentList = 'xyz'.split('');
+    
+    for (let i = 0; i < 3; i++) {
+      const row = document.createElement('div');
+      row.classList.add('ui-content-row');
+      
+      const label = document.createElement('label');
+      const input = document.createElement('input');
+      
+      const compStr = componentList[i].toUpperCase();
+      label.textContent = i === 0 ? `${displayName} ${compStr}` : compStr;
+      
+      input.type = 'number';
+      input.value = this[i];
+      input.disabled = mutable !== true;
+      
+      if (!mutable) {
+        row.classList.add('readonly');
+      } else {
+        input.addEventListener('change', e => {
+          this[i] = Number(e.target.value);
+        });
+      }
+      
+      row.appendChild(label);
+      row.appendChild(input);
+      
+      yield row;
+    }
   }
 }

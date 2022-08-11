@@ -1,6 +1,8 @@
 import { Vector3 } from './Vector3.js';
 
 export class Matrix4 {
+  static IDENTITY = new Matrix4();
+  
   constructor(
     m11 = 1, m12 = 0, m13 = 0, m14 = 0,
     m21 = 0, m22 = 1, m23 = 0, m24 = 0,
@@ -82,7 +84,18 @@ export class Matrix4 {
     return this.multiplyMatrices(m, this);
   }
   
-  perspective(fov, near, far, aspectRatio) {
+  infinitePerspective(fov, near, aspectRatio) {
+    const tanFov = Math.tan(0.5 * fov);
+    
+    return this.set(
+      1 / (aspectRatio * tanFov), 0, 0, 0,
+      0, 1 / tanFov, 0, 0,
+      0, 0, -1, -1,
+      0, 0, -2 * near, 0,
+    );
+  }
+  
+  perspectiveWithFarPlane(fov, near, far, aspectRatio) {
     const f = Math.tan((Math.PI - fov) / 2);
     const rangeInv = 1 / (near - far);
     
@@ -92,11 +105,29 @@ export class Matrix4 {
       0, 0, (near + far) * rangeInv, -1,
       0, 0, near * far * rangeInv * 2, 0,
     );
+    
+    return this;
+  }
+  
+  rotationX(t) {
+    return this.set(
+      1, 0, 0, 0,
+      0, Math.cos(t), Math.sin(t), 0,
+      0, -Math.sin(t), Math.cos(t), 0,
+      0, 0, 0, 1,
+    );
+  }
+  
+  rotationY(t) {
+    return this.set(
+      Math.cos(t), 0, -Math.sin(t), 0,
+      0, 1, 0, 0,
+      Math.sin(t), 0, Math.cos(t), 0,
+      0, 0, 0, 1,
+    );
   }
   
   compose(position, quaternion, scale) {
-		const te = this.elements;
-    
     const [tx, ty, tz] = position;
     const [x, y, z, w] = quaternion;
     const [sx, sy, sz] = scale;
@@ -106,27 +137,74 @@ export class Matrix4 {
 		const yy = y * y2, yz = y * z2, zz = z * z2;
 		const wx = w * x2, wy = w * y2, wz = w * z2;
 
-		te[ 0 ] = (1 - (yy + zz)) * sx;
-		te[ 1 ] = (xy + wz) * sx;
-		te[ 2 ] = (xz - wy) * sx;
-		te[ 3 ] = 0;
+		this.elements[0] = (1 - (yy + zz)) * sx;
+		this.elements[1] = (xy + wz) * sx;
+		this.elements[2] = (xz - wy) * sx;
+		this.elements[3] = 0;
 
-		te[ 4 ] = (xy - wz) * sy;
-		te[ 5 ] = (1 - (xx + zz)) * sy;
-		te[ 6 ] = (yz + wx) * sy;
-		te[ 7 ] = 0;
+		this.elements[4] = (xy - wz) * sy;
+		this.elements[5] = (1 - (xx + zz)) * sy;
+		this.elements[6] = (yz + wx) * sy;
+		this.elements[7] = 0;
 
-		te[ 8 ] = (xz + wy) * sz;
-		te[ 9 ] = (yz - wx) * sz;
-		te[ 10 ] = (1 - (xx + yy)) * sz;
-		te[ 11 ] = 0;
+		this.elements[8] = (xz + wy) * sz;
+		this.elements[9] = (yz - wx) * sz;
+		this.elements[10] = (1 - (xx + yy)) * sz;
+		this.elements[11] = 0;
 
-		te[ 12 ] = tx;
-		te[ 13 ] = ty;
-		te[ 14 ] = tz;
-		te[ 15 ] = 1;
+		this.elements[12] = tx;
+		this.elements[13] = ty;
+		this.elements[14] = tz;
+		this.elements[15] = 1;
 
 		return this;
+	}
+	
+	decompose(position, quaternion, scale) {
+		const m = this.elements;
+		const temp = new Vector3();
+		// const tempM =
+
+    // extract scale by taking magnitude of basis
+		let sx = temp.set(m[0], m[1], m[2]).length;
+		const sy = temp.set(m[4], m[5], m[6]).length;
+		const sz = temp.set(m[8], m[9], m[10]).length;
+
+		// if determine is negative, we need to invert one scale
+		sx = this.determinant < 0 ? -sx : sx;
+
+    // extract position
+		position.x = m[12];
+		position.y = m[13];
+		position.z = m[14];
+
+		// scale the rotation part
+		_m1.copy( this );
+
+		const invX = 1 / sx;
+		const invY = 1 / sy;
+		const invZ = 1 / sz;
+
+		_m1.elements[0] *= invX;
+		_m1.elements[1] *= invX;
+		_m1.elements[2] *= invX;
+
+		_m1.elements[4] *= invY;
+		_m1.elements[5] *= invY;
+		_m1.elements[6] *= invY;
+
+		_m1.elements[8] *= invZ;
+		_m1.elements[9] *= invZ;
+		_m1.elements[1] *= invZ;
+
+		quaternion.setFromRotationMatrix( _m1 );
+
+		scale.x = sx;
+		scale.y = sy;
+		scale.z = sz;
+
+		return this;
+
 	}
 	
 	get determinant() {
@@ -216,8 +294,41 @@ export class Matrix4 {
 	  return normalMatrix;
   }
   
+  get isMatrix() {
+    return true;
+  }
+  
+  setColumn(n, v) {
+    for (let i = 0; i < 3; i++) {
+      this.elements[n * 4 + i] = v[i];
+    }
+    
+    return this;
+  }
+  
+  columnVector(n) {
+    return new Vector3(...this.column(n));
+  }
+  
+  *row(n) {
+    for (let i = 0; i < 4; i++) {
+      yield this.elements[i * 4 + n];
+    }
+  }
+  
+  *column(n) {
+    yield *this.elements.slice(n * 4, n * 4 + 4);
+  }
+  
   *[Symbol.iterator]() {
     yield *this.elements;
+  }
+  
+  _getNdcDepth(linearZ) {
+    const z = this.m33 * linearZ + this.m34;
+    const w = this.m43 * linearZ;
+    
+    return z / w;
   }
 }
 

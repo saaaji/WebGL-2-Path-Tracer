@@ -1,16 +1,15 @@
+import { Matrix4 } from '../math/Matrix4.js';
+import { Vector3 } from '../math/Vector3.js';
 import { AABB } from '../accel/AABB.js';
 
 const GLSL_EPSILON = 1e-3;
-const TOLERANCE = Number.EPSILON;
-
-const approxEquals = (a, b, tolerance) => Math.abs(a - b) < tolerance;
 
 export class Triangle {
   #id;
-  #boundingBox;
+  #boundingBox = new AABB();
   
-  constructor(triangleIndex, indices, vertices) {
-    const realIndex = triangleIndex * 4;
+  constructor(triangleIndex, indices, vertices, stride = 3) {
+    const realIndex = triangleIndex * stride;
     
     const a = indices[realIndex] * 3,
       b = indices[realIndex + 1] * 3,
@@ -29,22 +28,69 @@ export class Triangle {
       cZ = vertices[c + 2];
     
     const needsEpsilon = (
-      approxEquals(aX, bX, TOLERANCE) && approxEquals(aX, cX, TOLERANCE) ||
-      approxEquals(aY, bY, TOLERANCE) && approxEquals(aY, cY, TOLERANCE) ||
-      approxEquals(aZ, bZ, TOLERANCE) && approxEquals(aZ, cZ, TOLERANCE)
+      aX == bX && aX == cX ||
+      aY == bY && aY == cY ||
+      aZ == bZ && aZ == cZ
     );
     
-    if (needsEpsilon) console.log("NEEDS EPSILON");
+    const offset = needsEpsilon ? GLSL_EPSILON : 0;
     
     this.#id = triangleIndex;
-    this.#boundingBox = new AABB(
+    this.#boundingBox.set(
       Math.min(aX, bX, cX),
       Math.min(aY, bY, cY),
       Math.min(aZ, bZ, cZ),
-      Math.max(aX, bX, cX) + (needsEpsilon ? GLSL_EPSILON : 0),
-      Math.max(aY, bY, cY) + (needsEpsilon ? GLSL_EPSILON : 0),
-      Math.max(aZ, bZ, cZ) + (needsEpsilon ? GLSL_EPSILON : 0),
+      Math.max(aX, bX, cX) + offset,
+      Math.max(aY, bY, cY) + offset,
+      Math.max(aZ, bZ, cZ) + offset,
     );
+    this.#boundingBox.update();
+  }
+  
+  get id() {
+    return this.#id;
+  }
+  
+  get boundingBox() {
+    return this.#boundingBox;
+  }
+}
+
+export class MeshBlas {
+  #id;
+  #boundingBox = new AABB();
+  #name;
+  
+  constructor({mesh: {boundingBox}, worldMatrix, name}, index) {
+    const min = boundingBox.min.clone();
+    const max = boundingBox.max.clone();
+    
+    /**
+     *    /*------*
+     *  /  |    / |
+     * *------#   |
+     * |   |  |   |
+     * |  /#------*
+     * |/     | /
+     * *------*
+     */
+     
+    const vertexList = [
+      min,
+      max,
+      new Vector3(max.x, min.y, min.z),
+      new Vector3(max.x, max.y, min.z),
+      new Vector3(min.x, max.y, min.z),
+      new Vector3(min.x, min.y, max.z),
+      new Vector3(max.x, min.y, max.z),
+      new Vector3(min.x, max.y, max.z),
+    ];
+    
+    vertexList.forEach(vertex => this.#boundingBox.addPoint(vertex.applyMatrix4(worldMatrix)));
+    
+    this.#id = index;
+    this.#boundingBox.update();
+    this.#name = name;
   }
   
   get id() {

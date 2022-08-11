@@ -1,3 +1,7 @@
+/**
+ * DEPRECATED LOADER (use GlbLoader)
+ */
+
 import { Matrix4 } from '../math/Matrix4.js';
 import { Vector3 } from '../math/Vector3.js';
 import { GL_CTX, assert, loadImage } from '../utilities/util.js';
@@ -7,7 +11,7 @@ const hex = n => '0x' + n.toString(16).toUpperCase().padStart(8, '0');
 const DEFAULT_SCENE = 0;
 const DEFAULT_CAMERA = 0;
 const LITTLE_ENDIAN = true;
-const DEFAULT_IMAGE_SIZE = 64;
+const DEFAULT_IMAGE_SIZE = 8;
 
 const MAGIC = 0x46546C67;
 const JSON_MAGIC = 0x4E4F534A;
@@ -58,6 +62,8 @@ export async function decodeGlb(files) {
   const normals = [];
   const images = [];
   const materials = [];
+  const lights = [];
+  const rawElements = [];
   
   const scene = gltf.scenes[gltf.scene ?? DEFAULT_SCENE];
   
@@ -71,20 +77,25 @@ export async function decodeGlb(files) {
     
     const baseColorTextureInfo = pbrMetallicRoughness.baseColorTexture;
     const metallicRoughnessTextureInfo = pbrMetallicRoughness.metallicRoughnessTexture;
+    const normalTextureInfo = material.normalTexture;
     
     const metallicFactor = pbrMetallicRoughness.metallicFactor ?? 1;
     const roughnessFactor = pbrMetallicRoughness.roughnessFactor ?? 1;
     const baseColorFactor = pbrMetallicRoughness.baseColorFactor ?? [1, 1, 1, 1];
-    
-    const baseColorTexture = await getPbrMap(gltf, binaryChunk, baseColorTextureInfo, baseColorFactor);
-    const metallicRoughnessTexture = await getPbrMap(gltf, binaryChunk, metallicRoughnessTextureInfo, [0, roughnessFactor, metallicFactor, 1]);
-    
     const emissiveFactor = material.emissiveFactor ?? [0, 0, 0];
+    
+    const baseColorTexture = await getPbrMap(gltf, binaryChunk, baseColorTextureInfo, [1, 1, 1, 1]);
+    const metallicRoughnessTexture = await getPbrMap(gltf, binaryChunk, metallicRoughnessTextureInfo, [1, 1, 1, 1]);
+    // const normalTexture = await getPbrMap(gltf, binaryChunk, normalTextureInfo, [0, 0, 1, 1]);
     
     materials.push({
       emissiveFactor,
+      baseColorFactor,
+      metallicFactor,
+      roughnessFactor,
       baseColorTexture: images.push(baseColorTexture) - 1,
       metallicRoughnessTexture: images.push(metallicRoughnessTexture) - 1,
+      // normalTexture: images.push(normalTexture) - 1,
     });
   }
   
@@ -120,9 +131,9 @@ export async function decodeGlb(files) {
         for (const primitive of mesh.primitives) {
           if ('mode' in primitive && primitive.mode === 4 || !('mode' in primitive)) {
             const materialIndex = primitive.material ?? materials.length - 1;
+            const material = materials[materialIndex];
             
-            assert(['POSITION', 'NORMAL', 'TEXCOORD_0'].every(attrib => attrib in primitive.attributes));
-            assert('indices' in primitive);
+            assert(['POSITION', 'NORMAL'].every(attrib => attrib in primitive.attributes));
             
             const attributes = {};
             for (const attribName in primitive.attributes) {
@@ -132,34 +143,64 @@ export async function decodeGlb(files) {
               attributes[attribName] = attribArray;
             }
             
-            const rawIndices = getAccessor(gltf, binaryChunk, primitive.indices);
             const offset = vertices.length / 3;
+            const triangleOffset = indices.length / 4;
             const v = new Vector3();
             
-            for (let i = 0; i < rawIndices.length; i++) {
-              indices.push(offset + rawIndices[i]);
-              
-              if ((i + 1) % 3 === 0) {
-                indices.push(materialIndex);
+            const isLight = material.emissiveFactor.some(channel => channel > 0);
+            
+            // parse indices
+            if ('indices' in primitive) {
+              const rawIndices = getAccessor(gltf, binaryChunk, primitive.indices);
+              for (let i = 0; i < rawIndices.length / 3; i++) {
+                indices.push(
+                  offset + rawIndices[i * 3 + 0],
+                  offset + rawIndices[i * 3 + 1],
+                  offset + rawIndices[i * 3 + 2],
+                  materialIndex,
+                );
+                
+                if (isLight) {
+                  lights.push(triangleOffset + i);
+                }
+              }
+            } else {
+              const numTriangles = attributes['POSITION'].length / 3 / 3;
+              for (let i = 0; i < numTriangles; i++) {
+                indices.push(
+                  offset + i * 3 + 0,
+                  offset + i * 3 + 1,
+                  offset + i * 3 + 2,
+                  materialIndex,
+                );
+                
+                if (isLight) {
+                  lights.push(triangleOffset + i);
+                }
               }
             }
             
-            for (let i = 0; i < attributes.POSITION.length; i += 3) {
-              v.setFromArray(attributes.POSITION, i).applyMatrix4(worldMatrix);
+            // parse texture coordinates
+            if ('TEXCOORD_0' in attributes) {
+              for (const texCoord of attributes['TEXCOORD_0']) {
+                texCoords.push(texCoord);
+              }
+            } else {
+              const texCoordOffset = texCoords.length;
+              texCoords.length += 2 * attributes['POSITION'].length / 3;
+              texCoords.fill(0, texCoordOffset);
+            }
+            
+            // parse vertices
+            for (let i = 0; i < attributes['POSITION'].length; i += 3) {
+              v.setFromArray(attributes['POSITION'], i).applyMatrix4(worldMatrix);
               vertices.push(...v);
             }
             
-            for (let i = 0; i < attributes.NORMAL.length; i += 3) {
-              v.setFromArray(attributes.NORMAL, i).applyMatrix4(normalMatrix).normalize();
+            // parse normals
+            for (let i = 0; i < attributes['NORMAL'].length; i += 3) {
+              v.setFromArray(attributes['NORMAL'], i).applyMatrix4(normalMatrix).normalize();
               normals.push(...v);
-            }
-            
-            // for (const normal of attributes.NORMAL) {
-            //   normals.push(normal);
-            // }
-            
-            for (const texCoord of attributes.TEXCOORD_0) {
-              texCoords.push(texCoord);
             }
           }
         }
@@ -178,8 +219,6 @@ export async function decodeGlb(files) {
   
   const camera = getCamera(gltf, cameraWorldMatrix);
   
-  console.log(materials);
-  
   return {
     indices,
     vertices,
@@ -188,6 +227,8 @@ export async function decodeGlb(files) {
     images,
     camera,
     materials,
+    lights,
+    rawElements,
   };
 }
 
@@ -310,12 +351,9 @@ async function getPbrMap(json, binary, textureInfo, factors) {
     const { source } = json.textures[index];
     
     const image = await getImage(json, binary, source);
-    const filteredImage = await filterImage(image, factors);
-    
-    return filteredImage;
+    return image;
   } else {
     const image = await createImage(factors, DEFAULT_IMAGE_SIZE);
-    
     return image;
   }
 }
@@ -336,29 +374,4 @@ async function createImage(color, size) {
   const image = await loadImage(url);
   
   return image;
-}
-
-async function filterImage(image, color) {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  
-  canvas.width = image.width;
-  canvas.height = image.height;
-  
-  ctx.drawImage(image, 0, 0);
-  
-  const imageData = ctx.getImageData(0, 0, image.width, image.height);
-  const { data } = imageData;
-  
-  for (let i = 0; i < data.length; i++) {
-    data[i] *= color[i % 4];
-  }
-  
-  ctx.putImageData(imageData, 0, 0);
-  
-  const blob = await new Promise(resolve => canvas.toBlob(blob => resolve(blob)));
-  const url = URL.createObjectURL(blob);
-  const newImage = await loadImage(url);
-  
-  return newImage;
 }

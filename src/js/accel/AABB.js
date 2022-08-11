@@ -49,6 +49,11 @@ export class AABB {
   get maxExtentAxis() {
     return this.#maxExtentAxis;
   }
+  
+  set(xMin, yMin, zMin, xMax, yMax, zMax) {
+    this.min.set(xMin, yMin, zMin);
+    this.max.set(xMax, yMax, zMax);
+  }
 
   clone() {
     return new AABB(...this.#min, ...this.#max);
