@@ -2,6 +2,10 @@ export class DisplayConsole {
   static #DEFAULT_INSTANCE = new DisplayConsole(document.querySelector('#console-output-container'));
   static #DEFAULT_MESSAGE = 'DisplayConsole Default Output';
   
+  static tagMap = {
+    '?': 'notice',
+  };
+  
   static getDefault() {
     return DisplayConsole.#DEFAULT_INSTANCE;
   }
@@ -29,7 +33,7 @@ export class DisplayConsole {
     this.#focus();
   }
   
-  #createOutputLine(type) {
+  #createOutputLine(type, tagName = null) {
     if (this.#container.classList.contains('empty')) {
       this.#container.removeChild(this.#container.firstChild);
       this.#container.classList.remove('empty');
@@ -60,6 +64,14 @@ export class DisplayConsole {
       }`;
     
     output.appendChild(timestamp);
+    
+    if (tagName) {
+      const tag = document.createElement('div');
+      tag.classList.add('tag', DisplayConsole.tagMap[tagName] ?? tagName);
+      tag.textContent = tagName;
+      output.appendChild(tag);
+    }
+    
     output.appendChild(message);
     
     this.#container.appendChild(output);
@@ -68,8 +80,8 @@ export class DisplayConsole {
   }
   
   // basic logging
-  log(message = DisplayConsole.#DEFAULT_MESSAGE) {
-    const output = this.#createOutputLine();
+  log(message = DisplayConsole.#DEFAULT_MESSAGE, tagName = null) {
+    const output = this.#createOutputLine(null, tagName);
     output.textContent = message;
     this.#focus();
   }
@@ -121,8 +133,8 @@ export class DisplayConsole {
     this.#timing[id] = performance.now();
   }
   
-  timeEnd(message = DisplayConsole.#DEFAULT_MESSAGE, id = 'default') {
+  timeEnd(message = DisplayConsole.#DEFAULT_MESSAGE, tagName = null, id = 'default') {
     const delta = performance.now() - this.#timing[id] ?? 0;
-    this.log(`${message}: ${delta.toFixed(2)}ms`);
+    this.log(`${message}: ${delta.toFixed(2)}ms`, tagName);
   }
 }

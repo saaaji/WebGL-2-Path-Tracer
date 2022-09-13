@@ -1,4 +1,4 @@
-export class ShaderFragmentDirectory {
+export class SourceCache {
   static #INCLUDE_REGEX = /#pragma HYDRA include<([._a-zA-Z]+)>/g;
   
   #modules = new Map();
@@ -21,7 +21,7 @@ export class ShaderFragmentDirectory {
     if (rawSource) {
       let source = rawSource;
       
-      for (const [directive, moduleName] of source.matchAll(ShaderFragmentDirectory.#INCLUDE_REGEX)) {
+      for (const [directive, moduleName] of source.matchAll(this.constructor.#INCLUDE_REGEX)) {
         source = source.replace(directive, this.#modules.get(moduleName) ?? '');
       }
       
@@ -37,6 +37,8 @@ export class ShaderFragmentDirectory {
 export class Pipeline {
   static #BUFFER_REGEX = /layout\(std140\) uniform ([_a-zA-Z]+)/g;
   
+  #vertexShader;
+  #fragmentShader;
   #program;
   #uniformLocations = new Map();
   #uniformUploadMethods = new Map();
@@ -54,6 +56,8 @@ export class Pipeline {
     const fragmentShader = createShader(gl, fragmentSource, gl.FRAGMENT_SHADER);
     const program = createProgram(gl, vertexShader, fragmentShader);
     
+    this.#vertexShader = vertexShader;
+    this.#fragmentShader = fragmentShader;
     this.#program = program;
     
     for (let i = 0; i < gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS); i++) {
@@ -106,6 +110,12 @@ export class Pipeline {
   
   getBufferIndex(name) {
     return this.#bufferIndices.get(name);
+  }
+  
+  dispose(gl) {
+    gl.deleteShader(this.#vertexShader);
+    gl.deleteShader(this.#fragmentShader);
+    gl.deleteProgram(this.#program);
   }
 }
 
@@ -168,9 +178,6 @@ function createProgram(gl, vertexShader, fragmentShader) {
 }
 
 function createShader(gl, source, type) {
-  const debugStr = source.split('\n').map((line, i) => (i + 1).toString().padEnd(5, ' ')+line).join('\n');
-  console.log(debugStr);
-  
   const shader = gl.createShader(type);
   
   gl.shaderSource(shader, source);
@@ -182,6 +189,10 @@ function createShader(gl, source, type) {
   
   const message = gl.getShaderInfoLog(shader);
   gl.deleteShader(shader);
+  
+  const debugStr = source.split('\n').map((line, i) => (i + 1).toString().padEnd(5, ' ')+line).join('\n');
+  console.error(debugStr);
+  
   throw new Error(message);
 }
 

@@ -1,7 +1,7 @@
 :root {
   --bg-color: #272727;
   --font-size: 11pt;
-  --font: sans-serif;
+  --font: 'Roboto';
 }
 
 html, body {

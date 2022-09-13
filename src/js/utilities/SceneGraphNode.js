@@ -5,15 +5,38 @@ import { Quaternion } from '../math/Quaternion.js';
 import { AABB } from '../accel/AABB.js';
 import { ActiveNodeEditor } from './ActiveNodeEditor.js';
 
+const onPositionChange = Symbol('onPositionChange');
+const onScaleChange = Symbol('onScaleChange');
+const onEulerChange = Symbol('onEulerChange');
+const onQuaternionChange = Symbol('onQuaternionChange');
+
 export class SceneGraphNode {
   static [ActiveNodeEditor.editableProperties] = [
     {prop: 'type', mutable: false, displayName: 'Type'},
     {prop: 'name', mutable: false, displayName: 'Name'},
     {prop: 'id', mutable: false, displayName: 'Internal ID'},
-    {prop: 'position', mutable: true, displayName: 'Position'},
-    {prop: 'rotation', mutable: true, displayName: 'Rotation'},
-    {prop: 'scale', mutable: true, displayName: 'Scale'},
+    {prop: 'position', mutable: true, triggerUpdate: true, displayName: 'Position'},
+    {prop: 'rotation', mutable: true, triggerUpdate: true, displayName: 'Rotation'},
+    {prop: 'scale', mutable: true, triggerUpdate: true, displayName: 'Scale'},
   ];
+  
+  static [onPositionChange] = function() {
+    this.update();
+  }
+  
+  static [onScaleChange] = function() {
+    this.update();
+  }
+  
+  static [onEulerChange] = function() {
+    this.#quat.setFromEuler(this.rotation, false);
+    this.update();
+  }
+  
+  static [onQuaternionChange] = function() {
+    this.rotation.setFromQuaternion(this.#quat, false);
+    this.update();
+  }
   
   parent = null;
   children = [];
@@ -24,6 +47,8 @@ export class SceneGraphNode {
   position = new Vector3();
   rotation = new Vector3();
   scale = new Vector3(1, 1, 1);
+  
+  #quat = new Quaternion();
   
   // id for picking
   id = 'NODE-' + Math
@@ -47,10 +72,20 @@ export class SceneGraphNode {
     } else {
       this.matrix.compose(translation, rotation, scale);
     }
+    
+    this.matrix.decompose(this.position, this.#quat, this.scale);
+    this.rotation.setFromQuaternion(this.#quat, false);
+    
+    this.position.onchange = this.constructor[onPositionChange].bind(this);
+    this.scale.onchange = this.constructor[onScaleChange].bind(this);
+    this.rotation.onchange = this.constructor[onEulerChange].bind(this);
+    this.#quat.onchange = this.constructor[onQuaternionChange].bind(this);
   }
   
   // update matrices of all nodes under this node
   update() {
+    this.matrix.compose(this.position, this.#quat, this.scale);
+    
     if (this.parent) {
       this.worldMatrix.multiplyMatrices(this.parent.worldMatrix, this.matrix);
     } else {

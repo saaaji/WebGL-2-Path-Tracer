@@ -388,25 +388,45 @@ vec3 traceRay(Ray ray) {
   vec3 radiance = vec3(0);
   vec3 throughput = vec3(1);
   
+  // if (closestHit(ray, T_MIN, T_MAX, isect)) {
+  //   vec3 dielectricBrdf = vec3(0);
+  //   vec3 metallicBrdf = vec3(1);
+    
+  //   vec3 brdf = mix(
+  //     dielectricBrdf,
+  //     metallicBrdf,
+  //     isect.matProps.metallicFactor
+  //   );
+    
+  //   return brdf;
+  // } else {
+  //   return vec3(0);
+  // }
+   
   for (int bounces = 0; bounces < 4; bounces++) {
     // if (!closestHit_UNSIGNED(ray, T_MIN, T_MAX, isect)) {
     if (!closestHit(ray, T_MIN, T_MAX, isect)) {
-      vec3 sky = mix(
-        vec3(1),
-        vec3(0.75, 0.85, 1),
-        (ray.direction.y + 0.5) / 1.5
-      );
-      return sky * throughput * 2.0;
-      //return vec3(0);
+      // vec3 sky = mix(
+      //   vec3(0.8, 0.6, 0.4),
+      //   vec3(0.1, 0.5, 1),
+      //   smoothstep(-0.5, 0.5, ray.direction.y)
+      // );
+      // return sky * throughput * 1.0;
+      return vec3(0);
     } else {
       // return vec3(1);
-      //return 0.5 + 0.5 * isect.geometricNormal;
+      // return vec3(1, isect.uv);
+      vec3 t = 0.5 + 0.5 * isect.geometricNormal;
+      // return vec3(
+      //   mix(vec3(1, 0, 0), vec3(0, 0, 1), t)
+      // );
+      return t;
     }
   
     ray.origin = isect.point;
     ray.direction = isect.tbn * uniformSampleHemisphere();
     
-    throughput *= INV_PI;
+    throughput *= INV_PI * isect.matProps.albedo;
   }
   
   return vec3(0);

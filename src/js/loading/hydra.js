@@ -268,9 +268,27 @@ function createMagic(string) {
   return view.getUint32(0, true);
 }
 
+class HydraAsset {
+  constructor(json, binary) {
+    this.json = json;
+    this.binary = binary;
+  }
+  
+  *[Symbol.iterator]() {
+    yield this.json;
+    yield this.binary;
+  }
+  
+  getBufferView(index) {
+    const {offset, length} = this.json.bufferViews[index];
+    
+    return this.binary.slice(offset, offset + length);
+  }
+}
+
 // import binary .hydra asset
-export async function decodeHydra(files) {
-  const file = files.item(0);
+export async function decodeHydra(file) {
+  // const file = files.item(0);
   const buffer = await file.arrayBuffer();
   
   // read GLB header
@@ -302,7 +320,7 @@ export async function decodeHydra(files) {
   const jsonText = new TextDecoder().decode(jsonBytes);
   const jsonChunk = JSON.parse(jsonText);
   
-  return [jsonChunk, binaryChunk];
+  return new HydraAsset(jsonChunk, binaryChunk);
 }
 
 function getTextureFormatting(dataType, numComponents) {

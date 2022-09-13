@@ -5,7 +5,7 @@ export const GL_CTX = document.createElement('canvas').getContext('webgl2');
 // misc. utility functions
 export const clamp = (n, min = -Infinity, max = Infinity) => Math.min(max, Math.max(min, n));
 
-export const canvasToBlob = (canvas, mimeType = 'image/png', quality = 0.92) => new Promise(resolve => {
+export const canvasToBlob = (canvas, mimeType = 'image/png', quality = 1) => new Promise(resolve => {
   canvas.toBlob(blob => resolve(blob), mimeType, quality);
 });
 
@@ -112,5 +112,29 @@ export class UboBuilder {
     return vec.length !== 3
       ? this.SCALAR_SIZE * vec.length
       : this.SCALAR_SIZE * 4;
+  }
+}
+
+export class EventTarget {
+  #listeners = new Map();
+  
+  addEventListener(name, listener) {
+    if (!this.#listeners.has(name)) {
+      this.#listeners.set(name, new Set());
+    }
+    
+    this.#listeners.get(name).add(listener);
+  }
+  
+  removeEventListener(name, listener) {
+    this.#listeners.get(name)?.delete(listener);
+    
+    if (this.#listeners.get(name)?.size === 0) {
+      this.#listeners.delete(name);
+    }
+  }
+  
+  dispatchEvent(name, data = null) {
+    this.#listeners.get(name)?.forEach(listener => listener.call(this, data));
   }
 }

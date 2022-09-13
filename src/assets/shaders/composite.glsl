@@ -19,5 +19,6 @@ void main() {
   vec3 albedo = texture(u_albedo, v_texCoord).rgb;
   
   vec3 col = mix(albedo, OUTLINE_COLOR, outline.a);
+  // vec3 col = albedo;
   fragColor = vec4(col, 1);
 }

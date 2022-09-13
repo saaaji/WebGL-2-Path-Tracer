@@ -1,112 +1,112 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title id='title'>Hydra</title>
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap" rel="stylesheet">
-    
-    <link rel='stylesheet' type='text/css' href='./css/hydra.css'/>
+    <title>hydra-WGLRT</title>
+    <link rel='stylesheet' type='text/css' href='./css/hydra_scene_exporter.css'/>
+    <!--Import tree viewer element for scene graph-->
+    <script src='./js/utilities/TreeViewer.js' type='module'></script>
   </head>
   <body>
-    <script src='./js/utilities/TreeViewer.js' type='module'></script>
-    <div class='container'>
-      
-      <div class='panel-col' id='panel0'>
-        <div class='panel input-panel' id='config'>
-          <div class='title'>Rendering</div>
-          <div class='input-row'>
-            <label>Choose scene (<span style="font-family: 'Roboto Mono', monospace">.hydra</span>)</label>
-            <input id='choose-hydra-scene' type='file' accept='.hydra'/>
+    <div id='ui-container'>
+      <div class='ui-column'>
+        <div class='ui-section'>
+          <div class='ui-section-title'>Render Settings</div>
+          <div class='ui-section-content'>
+            <div class='ui-content-row'>
+              <label for='import-scene'>Choose scene (<span class='mono-label'>.hydra</span>)</label>
+              <input id='import-scene' type='file' accept='.hydra'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='choose-hdri'>Choose environment map (<span class='mono-label'>HDRi</span>)</label>
+              <input id='choose-hdri' type='file' accept='.hdr'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='viewport-width'>Viewport width</label>
+              <input id='viewport-width' type='number' value='512'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='viewport-height'>Viewport height</label>
+              <input id='viewport-height' type='number' value='512'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='tile-count-x'>Horizontal tile count</label>
+              <input id='tile-count-x' type='number' value='8'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='tile-count-y'>Vertical tile count</label>
+              <input id='tile-count-y' type='number' value='8'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='emissive-factor'>Emissive factor</label>
+              <input id='emissive-factor' type='number' value='1'/>
+            </div>
+            <div class='ui-content-row'>
+              <input id='render' type='button' value='Render'/>
+            </div>
           </div>
-          <div class='input-row'>
-            <label>Environment map (<span style="font-family: 'Roboto Mono', monospace">.hdr</span>)</label>
-            <input id='radiance-map' type='file' accept='.hdr'/>
-          </div>
-          <div class='input-row'>
-            <label>Image width</label>
-            <input id='image-width' type='number' value='512' min='1'/>
-          </div>
-          <div class='input-row'>
-            <label>Image height</label>
-            <input id='image-height' type='number' value='512' min='1'/>
-          </div>
-          <div class='input-row'>
-            <label>Tiles (X)</label>
-            <input id='horizontal-work-groups' type='number' value='8' min='1'/>
-          </div>
-          <div class='input-row'>
-            <label>Tiles (Y)</label>
-            <input id='vertical-work-groups' type='number' value='8' min='1'/>
-          </div>
-          <div class='input-row'>
-            <label>Emissive factor</label>
-            <input id='emissive-factor' type='number' value='1' min='0'/>
-          </div>
-          <div class='input-row'>
-            <label>Focal distance</label>
-            <input id='focal-distance' type='number' value='1' min='0'/>
-          </div>
-          <div class='input-row'>
-            <label>Lens radius</label>
-            <input id='lens-radius' type='number' value='0' min='0'/>
-          </div>
-          
-          
-          <div class='input-row'>
-            <label>FAR debug</label>
-            <input id='slider' type='range' min='0' max='30' step='0.001'/>
-          </div>
-          
-          <input type='button' disabled value='Render' id='render-scene' class='submit'>
         </div>
-        <div class='panel input-panel' id='export'>
-          <div class='title'>Exporting</div>
-          <div class='input-row'>
-            <label>Choose scene (<span style="font-family: 'Roboto Mono', monospace">.glb</span>)</label>
-            <input id='choose-glb-scene' type='file' accept='.glb'/>
+        <div class='ui-section'>
+          <div class='ui-section-title'>Export Settings</div>
+          <div class='ui-section-content'>
+            <div class='ui-content-row'>
+              <label for='export-scene'>Choose scene (<span class='mono-label'>.glb</span>)</label>
+              <input id='export-scene' type='file' accept='.glb'/>
+            </div>
+            <div class='ui-content-row'>
+              <input id='export' type='button' value='Export'/>
+            </div>
           </div>
-          <input type='button' disabled value='Export' id='export-scene' class='submit'>
         </div>
       </div>
-      
-      <div class='panel-col' id='panel1'>
-        <div class='panel visual' id='render'>
-          <canvas id='canvas'>Canvas is not supported</canvas>
-          <div id='controls'>
-            <input id='pause-render' type='image' width='20' height='20' title='Pause' src='./assets/images/pause.png'/>
-            <input id='save-frame' type='image' width='20' height='20' title='Download' src='./assets/images/download.png'/>
+      <div class='ui-column'>
+        <div class='ui-section'>
+          <div class='ui-section-title'>Viewport</div>
+          <div class='ui-section-content' id='viewport-container'>
+            <canvas id='hydra-canvas' width='512' height='512' style='background-color:black;'></canvas>
+            <!--<div id='viewport-controls'>
+              <input id='pause' type='image' width='20' height='20' title='Pause' src='./assets/images/pause.png'/>
+              <input id='save' type='image' width='20' height='20' title='Download' src='./assets/images/download.png'/>
+            </div>-->
+            <div id='key-bindings' class='hidden'>
+              <p>[t] toggle key bindings</p>
+              <p>[p] <span id='p' style='font-weight: bold;'>pause</span>/<span id='u'>unpause</span></p>
+              <p>[r] toggle render mode</p>
+              <p>[g] grab scene</p>
+              <p>[c] clear trace buffer</p>
+              <p>[s] log sample count</p>
+              <p>[d] download snapshot</p>
+              <p>[l] clear logs</p>
+            </div>
           </div>
-          <div id='command-status'>NODE / GRAB / X-AXIS</div>
         </div>
-        <div class='panel visual empty' id='downloads'>No Snapshots</div>
+        <div class='ui-section' id='console-container'>
+          <div class='ui-section-title'>Console</div>
+          <div class='ui-section-content empty' id='console-output-container'>
+            No Messages
+            <!-- Example Message Formatting:
+            <div class='console-output-row'>
+              <div class='console-output-row-timestamp'>...</div>
+              <div class='console-output-row-message'>...</div>
+            </div>
+            -->
+          </div>
+        </div>
       </div>
-      
-      <div class='panel-col' id='panel2'>
-        <div class='panel' id='tree-panel'>
-          <div class='title'>Scenegraph</div>
-          <tree-viewer id='tree-viewer'></tree-viewer>
+      <div class='ui-column'>
+        <div class='ui-section' id='node-tree-container'>
+          <div class='ui-section-title'>Node Tree</div>
+          <div class='ui-section-content' id='tree-viewer-container'>
+            <tree-viewer id='tree-viewer'></tree-viewer>
+          </div>
         </div>
-        
-        <div class='panel input-panel'>
-          <div class='title'>Node Editor</div>
-          <div class='input-row'>
-            <label>Position</label>
-            <div class='vector-input'><input type='number' placeholder='x'><input type='number' placeholder='y'><input type='number' placeholder='z'></div>
+        <div class='ui-section'>
+          <div class='ui-section-title'>Active Node</div>
+          <div class='ui-section-content empty' id='active-node-container'>
+            No Selection
           </div>
-          <div class='input-row'>
-            <label>Rotation</label>
-            <div class='vector-input'><input type='number' placeholder='x'><input type='number' placeholder='y'><input type='number' placeholder='z'></div>
-          </div>
-          <div class='input-row'>
-            <label>Scale</label>
-            <div class='vector-input'><input type='number' placeholder='x'><input type='number' placeholder='y'><input type='number' placeholder='z'></div>
-          </div>
-          <canvas id='debug-canvas'></canvas>
         </div>
       </div>
     </div>
-    <script type='module' src='./js/index.js'></script>
+    <script src='./js/index.js' type='module'></script>
   </body>
 </html>

@@ -163,7 +163,7 @@ export class Matrix4 {
 	decompose(position, quaternion, scale) {
 		const m = this.elements;
 		const temp = new Vector3();
-		// const tempM =
+		const m1 = new Matrix4();
 
     // extract scale by taking magnitude of basis
 		let sx = temp.set(m[0], m[1], m[2]).length;
@@ -179,32 +179,31 @@ export class Matrix4 {
 		position.z = m[14];
 
 		// scale the rotation part
-		_m1.copy( this );
+		m1.copy(this);
 
 		const invX = 1 / sx;
 		const invY = 1 / sy;
 		const invZ = 1 / sz;
 
-		_m1.elements[0] *= invX;
-		_m1.elements[1] *= invX;
-		_m1.elements[2] *= invX;
+		m1.elements[0] *= invX;
+		m1.elements[1] *= invX;
+		m1.elements[2] *= invX;
 
-		_m1.elements[4] *= invY;
-		_m1.elements[5] *= invY;
-		_m1.elements[6] *= invY;
+		m1.elements[4] *= invY;
+		m1.elements[5] *= invY;
+		m1.elements[6] *= invY;
 
-		_m1.elements[8] *= invZ;
-		_m1.elements[9] *= invZ;
-		_m1.elements[1] *= invZ;
+		m1.elements[8] *= invZ;
+		m1.elements[9] *= invZ;
+		m1.elements[1] *= invZ;
 
-		quaternion.setFromRotationMatrix( _m1 );
+		quaternion.setFromRotationMatrix(m1);
 
 		scale.x = sx;
 		scale.y = sy;
 		scale.z = sz;
 
 		return this;
-
 	}
 	
 	get determinant() {

@@ -83,7 +83,7 @@ class RenderPass {
   
   // render pass I/O
   _getInstKey(name, pass) {
-    return `INST[${pass.name} -> ${name}]`;
+    return `inst(${pass.name}, ${name})`;
   }
   
   addAttachmentInput(name, pass) {
@@ -118,6 +118,8 @@ class RenderPass {
   // initialize render target
   _build(gl, fbo) {
     this.#fbo = fbo;
+    
+    // console.log(this.name, fbo);
     
     if (this.#fbo !== null) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.#fbo);
@@ -162,6 +164,8 @@ class RenderPass {
       .fill()
       .map((_, i) => gl.COLOR_ATTACHMENT0 + i);
     
+    // console.log(this.name, this.fboKey);
+    
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.#fbo);
     gl.drawBuffers(colorBuffers);
     
@@ -175,10 +179,11 @@ class Frame {
 }
 
 export class FrameGraph {
+  static #CANVAS_KEY = 'FBO()';
+  static Tex = FrameGraphTextureResource;
+  
   #gl;
   #frames = new Map();
-  // #passes = [];
-  // #orderedPasses = [];
   
   // user must initialize external resources
   #textures = new Map();
@@ -186,7 +191,7 @@ export class FrameGraph {
   #buffers = new Map();
   #vertexArrays = new Map();
   #renderTargets = new Map([
-    ['FBO()', null],
+    [FrameGraph.#CANVAS_KEY, null],
   ]);
   
   #textureTypes = new Map();
@@ -253,6 +258,9 @@ export class FrameGraph {
     this.#vertexArrays.clear();
     this.#renderTargets.clear();
     this.#frames.clear();
+    
+    this.#dependencyMap = {};
+    this.#renderTargets.set(FrameGraph.#CANVAS_KEY, null);
   }
   
   /**
@@ -310,8 +318,8 @@ export class FrameGraph {
   }
 
   getFramebuffer(frame, passName) {
-    const pass = this.#frames.get(frame).passes.find(pass => pass.name === passName);
-    return this.#renderTargets.get(pass.fboKey);
+    const pass = this.#frames.get(frame)?.passes.find(pass => pass.name === passName);
+    return this.#renderTargets.get(pass?.fboKey);
   }
 
   // visit function for topological sort
@@ -324,7 +332,7 @@ export class FrameGraph {
         
         for (const name of pass._getOutputAttachments()) {
           if (name in this.#dependencyMap) {
-            console.log(name, this.#dependencyMap[name]);//.map(({name}) => name));
+            // console.log(name, this.#dependencyMap[name]);//.map(({name}) => name));
             
             for (const dependency of this.#dependencyMap[name]) {
               if (pass !== dependency) {
@@ -341,7 +349,6 @@ export class FrameGraph {
       case TopologicalSortMark.PERMANENT:
         return;
       case TopologicalSortMark.TEMPORARY:
-        console.log(FrameGraph.prev.name, pass.name);
         throw new Error('topological sort failed: frame graph is not a directed-acyclic-graph');
     }
   }
@@ -359,8 +366,6 @@ export class FrameGraph {
     while (currentPass = frame.passes.find(pass => pass.marking !== TopologicalSortMark.PERMANENT)) {
       this.#visitRenderPass(frame, currentPass);
     }
-    
-    console.log(frame.orderedPasses.map(pass => pass.name));
     
     frame.passes.forEach(pass => {
       pass._build(this.#gl, this.#renderTargets.get(pass.fboKey));

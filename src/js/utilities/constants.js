@@ -27,3 +27,10 @@ export const FOCAL_DIST_OUTLINE_VERTICES = [
   +1, +1, +1, /* -> */ +1, -1, +1,
   +1, -1, +1, /* -> */ -1, -1, +1,
 ];
+
+export const EDITOR_COLOR_SCHEME = window.hydra_EDITOR_COLOR_SCHEME = {
+  camera: [0.15, 0.15, 0.15],
+  mesh: [0.8, 0.8, 0.8],
+  selection: [1, 0.6, 0],
+  focalPlane: [0, 0.6, 1],
+};

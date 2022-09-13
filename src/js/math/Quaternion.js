@@ -121,7 +121,7 @@ export class Quaternion {
   
   setFromRotationMatrix(r) {
 		// http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/index.htm
-		trace = r.m11 + r.m22 + r.m33;
+		let trace = r.m11 + r.m22 + r.m33;
 
 		if (trace > 0) {
 			const s = 0.5 / Math.sqrt(trace + 1.0);
