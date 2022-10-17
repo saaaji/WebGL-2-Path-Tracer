@@ -3,18 +3,22 @@ import { EventTarget, clamp, createEnum } from './utilities/util.js';
 import { ActiveNodeEditor } from './utilities/ActiveNodeEditor.js';
 import { HydraModel } from './model.js';
 import { encodeHydra } from './loading/hydra.js';
+import { SHADER_DEFINES } from './utilities/constants.js';
 
 class HydraView extends EventTarget {
-  static MIN_WIDTH = 300;
-  static MAX_WIDTH = 600;
+  static MIN_WIDTH = 256;
+  static MAX_WIDTH = 512;
   
   chooseScene = this.getElement('#import-scene');
+  chooseDefaultScene = this.getElement('#import-default-scene');
   chooseEnvMap = this.getElement('#choose-hdri');
   width = this.getElement('#viewport-width');
   height = this.getElement('#viewport-height');
   numTilesX = this.getElement('#tile-count-x');
   numTilesY = this.getElement('#tile-count-y');
   emissiveFactor = this.getElement('#emissive-factor');
+  threshold = this.getElement('#threshold');
+  defines = this.getElement('#defines');
   render = this.getElement('#render');
   
   nodeTree = this.getElement('#tree-viewer');
@@ -23,6 +27,7 @@ class HydraView extends EventTarget {
   canvas = this.getElement('#hydra-canvas');
   pause = this.getElement('#pause');
   
+  sampleCount = this.getElement('#sample-count');
   pauseLabel = this.getElement('#p');
   unpauseLabel = this.getElement('#u');
   
@@ -46,6 +51,17 @@ class HydraView extends EventTarget {
       this.render.disabled = target.files.length === 0;
     });
     
+    this.chooseDefaultScene.addEventListener('change', ({target}) => {
+      this.chooseScene.disabled = target.value !== 'none';
+      
+      if (this.chooseScene.disabled) {
+        this.chooseScene.value = '';
+        this.render.disabled = false;
+      } else {
+        this.render.disabled = true;
+      }
+    });
+    
     // selecting a node
     this.nodeTree.addEventListener('change', ({target}) => {
       this.nodeEditor.activeNode = target.selectedNode;
@@ -65,6 +81,7 @@ class HydraController extends EventTarget {
   mode = HydraController.Mode.RASTER;
   paused = false;
   lastFrameId = -1;
+  snapshotSampleThreshold = 0;
   
   frameGraph;
   
@@ -74,20 +91,26 @@ class HydraController extends EventTarget {
     const view = this.view = new HydraView();
     const model = this.model = new HydraModel(view.gl);
     
+    view.defines.value = SHADER_DEFINES;
+    
     // choose scene interface
-    view.render.addEventListener('click', () => {
-      if (this.paused) {
+    view.render.addEventListener('click', async () => {
+      if (!this.paused) {
         this.togglePaused();
       }
       
       window.cancelAnimationFrame(this.lastFrameId);
       view.nodeEditor.activeNode = null;
-      model.reset();
+      this.reset();
       
       const [file] = view.chooseScene.files;
       const [environmentMap] = view.chooseEnvMap.files;
       
-      DisplayConsole.getDefault().log(`Loading asset: ${file.name}`);
+      if (file) {
+        DisplayConsole.getDefault().log(`Loading asset: ${file.name}`);
+      } else {
+        DisplayConsole.getDefault().log(`Loading asset: ${view.chooseDefaultScene.value}`);
+      }
       
       const width = parseInt(view.width.value);
       const height = parseInt(view.height.value);
@@ -96,8 +119,11 @@ class HydraController extends EventTarget {
       view.canvas.width = clamp(width, HydraView.MIN_WIDTH, HydraView.MAX_WIDTH);
       view.canvas.height = view.canvas.width / (width / height);
       
+      this.snapshotSampleFactor = parseInt(view.threshold.value);
+      model.sourceCache.registerModuleRaw('usr_shader_defines', view.defines.value);
+      
       model.updateState({
-        file,
+        file: file ?? await fetch('./assets/scenes/' + view.chooseDefaultScene.value),
         environmentMap,
         renderConfig: {
           width,
@@ -121,10 +147,8 @@ class HydraController extends EventTarget {
     
     view.nodeEditor.updateCallback = () => {
       if (this.mode === HydraController.Mode.TRACE) {
-        window.cancelAnimationFrame(this.lastFrameId);
         model.uploadTlas().then(() => {
-          model.reset();
-          window.requestAnimationFrame(this.render);
+          this.reset();
         });
       }
     };
@@ -151,13 +175,14 @@ class HydraController extends EventTarget {
       frameGraph.build('view');
       
       this.frameGraph = frameGraph;
-      
-      if (!this.paused) {
-        window.requestAnimationFrame(this.render);
-      }
+      this.togglePaused();
     });
     
     // updating key map
+    view.defines.addEventListener('keydown', event => {
+      event.stopPropagation();
+    });
+    
     document.addEventListener('keydown', ({key}) => {
       this.keyMap[key] = true;
       
@@ -167,18 +192,18 @@ class HydraController extends EventTarget {
           break;
         case 'r':
           if (this.mode === HydraController.Mode.RASTER) {
-            model.reset();
+            this.reset();
             model.uploadTlas().then(() => {
               this.mode = HydraController.Mode.TRACE;
             });
           } else {
-            model.reset();
+            this.reset();
             this.mode = HydraController.Mode.RASTER;
           }
           break;
         case 'c':
           if (this.mode === HydraController.Mode.TRACE) {
-            model.reset();
+            this.reset();
           }
           break;
         case 's':
@@ -186,13 +211,7 @@ class HydraController extends EventTarget {
           break;
         case 'd':
           if (this.mode === HydraController.Mode.TRACE) {
-            model.serialize().then(blob => {
-              const [scene] = view.chooseScene.files;
-              const name = scene.name.split('.')[0] + ` (${model.sampleCount} samples)` + '.png';
-              const file = new File([blob], name);
-              
-              DisplayConsole.getDefault().logDownloadable`Snapshot ready for download: ${file}`;
-            });
+            this.logSnapshot();
           }
           break;
         case 'l':
@@ -256,11 +275,26 @@ class HydraController extends EventTarget {
     
     if (this.mode === HydraController.Mode.TRACE) {
       if (this.paused) {
-        DisplayConsole.getDefault().log('Pausing kernel', '?');
+        DisplayConsole.getDefault().log('Pausing shader', '?');
       } else {
-        DisplayConsole.getDefault().log('Unpausing kernel', '?');
+        DisplayConsole.getDefault().log('Unpausing shader', '?');
       }
     }
+  }
+  
+  reset() {
+    this.model.reset();
+    this.snapshotSampleThreshold = 1;
+  }
+  
+  logSnapshot() {
+    this.model.serialize().then(([blob, sampleCount]) => {
+      const [scene] = this.view.chooseScene.files;
+      const name = (scene?.name ?? this.view.chooseDefaultScene.value).split('.')[0] + ` (${sampleCount} sample${sampleCount > 1 ? 's' : ''})` + '.png';
+      const file = new File([blob], name);
+      
+      DisplayConsole.getDefault().logDownloadable`Snapshot: ${file}`;
+    });
   }
   
   render = () => {
@@ -270,6 +304,14 @@ class HydraController extends EventTarget {
         break;
       case HydraController.Mode.TRACE:
         this.frameGraph.execute('rtx');
+        
+        this.view.sampleCount.textContent = this.model.sampleCount;
+        
+        if (this.snapshotSampleFactor > 1 && this.model.sampleCount === this.snapshotSampleThreshold) {
+          this.logSnapshot();
+          this.snapshotSampleThreshold *= this.snapshotSampleFactor;
+        }
+        
         break;
     }
     

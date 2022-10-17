@@ -15,6 +15,11 @@ export class SourceCache {
     return this.#modules.get(name);
   }
   
+  registerModuleRaw(name, source) {
+    this.#modules.set(name, source);
+    return this.#modules.get(name);
+  }
+  
   fetchModule(name) {
     const rawSource = this.#modules.get(name);
     

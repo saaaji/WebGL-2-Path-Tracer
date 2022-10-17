@@ -34,3 +34,12 @@ export const EDITOR_COLOR_SCHEME = window.hydra_EDITOR_COLOR_SCHEME = {
   selection: [1, 0.6, 0],
   focalPlane: [0, 0.6, 1],
 };
+
+export const SHADER_DEFINES =
+`#define RUSSIAN_ROULETTE
+#define DOUBLE_SIDED_EMITTERS
+#define MSAA
+#define KILL_NANS
+#define INTEGRATOR traceRay
+//#define CMP_INTEGRATOR traceRay_CMP
+#define CMP_TILE_SIZE 64.0`;

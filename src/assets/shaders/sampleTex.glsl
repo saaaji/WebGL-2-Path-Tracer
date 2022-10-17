@@ -13,9 +13,14 @@ const float GAMMA = 2.2;
 const vec3 NAN_RECOLOR = vec3(1, 0, 0);
 
 void main() {
+  // HDR [0, +inf)
   vec3 averageRadiance = texture(u_outputImage, v_texCoord).rgb * u_sampleCountInv;
-  fragment = vec4(pow(averageRadiance, vec3(1.0 / GAMMA)), 1);
   
-  if (any(isnan(fragment)))
+  // LDR [0, 1]
+  vec3 col = clamp(pow(averageRadiance, vec3(1.0 / GAMMA)), 0.0, 1.0);
+  fragment = vec4(col, 1);
+  
+  if (any(isnan(fragment))) {
     fragment = vec4(NAN_RECOLOR, 1);
+  }
 }

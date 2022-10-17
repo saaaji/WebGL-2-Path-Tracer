@@ -108,6 +108,7 @@ bool intersectsTriangle(ShadingTriangle tri, BlasDescriptor descriptor, Ray obje
     isect.shadingTangent = shadingTangent;
     isect.shadingBitangent = shadingBitangent;
     isect.tbn = mat3(isect.shadingTangent, isect.shadingBitangent, isect.shadingNormal);
+    isect.mesh = descriptor;
     
     // transform intersection point from object- to world-space
     isect.point = (descriptor.worldMatrix * vec4(pointAt(objectRay, t), 1)).xyz;
@@ -187,5 +188,7 @@ bool closestHit(Ray worldRay, float tMin, float tMax, out IsectInfo isect) {
   
   return anyHit;
 }
+
+
 
 #endif // CLOSEST_HIT

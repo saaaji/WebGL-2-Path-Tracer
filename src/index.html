@@ -2,7 +2,7 @@
 <html>
   <head>
     <title>hydra-WGLRT</title>
-    <link rel='stylesheet' type='text/css' href='./css/hydra_scene_exporter.css'/>
+    <link rel='stylesheet' type='text/css' href='./css/hydra.css'/>
     <!--Import tree viewer element for scene graph-->
     <script src='./js/utilities/TreeViewer.js' type='module'></script>
   </head>
@@ -13,8 +13,16 @@
           <div class='ui-section-title'>Render Settings</div>
           <div class='ui-section-content'>
             <div class='ui-content-row'>
-              <label for='import-scene'>Choose scene (<span class='mono-label'>.hydra</span>)</label>
+              <label for='import-scene'>Import scene (<span class='mono-label'>.hydra</span>)</label>
               <input id='import-scene' type='file' accept='.hydra'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='import-default-scene'>Choose default scene</label>
+              <select id='import-default-scene'>
+                <option value="none" selected>None (Import)</option>
+                <option value="CornellBox.hydra">CornellBox.hydra</option>
+                <option value="Lego.hydra">Lego.hydra</option>
+              </select>
             </div>
             <div class='ui-content-row'>
               <label for='choose-hdri'>Choose environment map (<span class='mono-label'>HDRi</span>)</label>
@@ -29,16 +37,33 @@
               <input id='viewport-height' type='number' value='512'/>
             </div>
             <div class='ui-content-row'>
-              <label for='tile-count-x'>Horizontal tile count</label>
+              <label for='emissive-factor'>Emissive factor</label>
+              <input id='emissive-factor' type='number' value='1'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='threshold'>Auto-snapshot frequency</label>
+              <input id='threshold' type='number' value='4'/>
+            </div>
+            <div class='ui-content-row'>
+              <label for='tile-count-x'>
+                Horizontal tile count
+                <span class='attrib-warning' title="Don't touch this unless you know what you're doing!">[!]</span>
+              </label>
               <input id='tile-count-x' type='number' value='8'/>
             </div>
             <div class='ui-content-row'>
-              <label for='tile-count-y'>Vertical tile count</label>
+              <label for='tile-count-y'>
+                Vertical tile count
+                <span class='attrib-warning' title="Don't touch this unless you know what you're doing!">[!]</span>
+              </label>
               <input id='tile-count-y' type='number' value='8'/>
             </div>
             <div class='ui-content-row'>
-              <label for='emissive-factor'>Emissive factor</label>
-              <input id='emissive-factor' type='number' value='1'/>
+              <label for='defines'>
+                Shader defines
+                <span class='attrib-warning' title="Don't touch this unless you know what you're doing!">[!]</span>
+              </label>
+              <textarea id='defines' spellcheck="false"></textarea>
             </div>
             <div class='ui-content-row'>
               <input id='render' type='button' value='Render'/>
@@ -68,6 +93,7 @@
               <input id='save' type='image' width='20' height='20' title='Download' src='./assets/images/download.png'/>
             </div>-->
             <div id='key-bindings' class='hidden'>
+              <p>Samples: <span id='sample-count'>0</span></p>
               <p>[t] toggle key bindings</p>
               <p>[p] <span id='p' style='font-weight: bold;'>pause</span>/<span id='u'>unpause</span></p>
               <p>[r] toggle render mode</p>

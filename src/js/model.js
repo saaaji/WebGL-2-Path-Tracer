@@ -275,6 +275,8 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     const previewWidth = PREVIEW_DEFAULT_WIDTH * SSAA_LEVEL;
     const previewHeight = Math.floor(PREVIEW_DEFAULT_WIDTH / aspectRatio) * SSAA_LEVEL;
     
+    console.log(previewWidth, previewHeight, previewWidth / previewHeight);
+    
     this.fg.createTexture('g-color0', FrameGraph.Tex.TEXTURE_2D, (gl, texture) => {
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, previewWidth, previewHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -338,7 +340,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     });
     
     this.fg.createVertexArray('camera-frustum', (gl, vertexArray) => {
@@ -894,13 +896,14 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
   
-  serialize() {
+  async serialize() {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     const gl = this.gl;
     const [width, height] = this.dimensions;
     const data = new Uint8Array(width * height * 4);
     const imageData = ctx.createImageData(width, height);
+    const sampleCount = this.sampleCount;
     
     // read pixels from copy-target
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fg.getFramebuffer('rtx', 'tonemap-pass'));
@@ -923,6 +926,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     canvas.height = height;
     ctx.putImageData(imageData, 0, 0);
     
-    return canvasToBlob(canvas);
+    const blob = await canvasToBlob(canvas);
+    return [blob, sampleCount];
   }
 }

@@ -76,7 +76,7 @@ bool anyHit(Ray worldRay, float tMin, float tMax) {
           // if traversing at triangle-level, intersect ray with primitive
           Triangle tri = getTriangle(primitiveId);
           
-          if (intersectsTriangle(tri, mesh, traversalRay, tMin, tMax)) {
+          if (intersectsTriangle(tri, traversalRay, tMin, tMax)) {
             return true;
           }
           

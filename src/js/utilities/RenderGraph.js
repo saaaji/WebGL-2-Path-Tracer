@@ -377,6 +377,8 @@ export class FrameGraph {
     const gl = this.#gl;
     const frame = this.#frames.get(name);
     
+    // console.warn(name);
+    
     frame.orderedPasses.forEach(pass => {
       const textureBindings = {};
       

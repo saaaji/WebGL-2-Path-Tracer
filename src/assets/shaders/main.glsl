@@ -18,7 +18,13 @@ out vec4 fragment;
   (mat * vec4(ray.direction, 0)).xyz\
 )
 
+#define TRANSFORM_VEC(mat, vec) ((mat * vec4(vec, 1)).xyz)
+#define TRANSFORM_DIR(mat, dir) ((mat * vec4(vec, 0)).xyz)
+
 #define CLAMP_DOT(v1, v2) clamp(dot(v1, v2), 0.0, 1.0)
+#define ABS_DOT(v1, v2) abs(dot(v1, v2))
+
+#pragma HYDRA include<usr_shader_defines>
 
 // structure definitions
 struct Ray {
@@ -66,7 +72,7 @@ struct IsectInfo {
   ShadingTriangle tri;
   Material mat;
   MaterialProperties matProps;
-  BlasDescriptor d;
+  BlasDescriptor mesh;
 };
 
 struct DataTextureF {
@@ -95,7 +101,7 @@ struct TextureDescriptor {
 };
 
 struct EmissivePrimitive {
-  int id, blasIndex;
+  int primitiveId, meshId;
 };
 
 // misc. uniforms
@@ -152,7 +158,7 @@ layout(std140) uniform BlasDescriptors {
 };
 
 // constants
-const int MAX_BOUNCES = 4;
+const int MAX_BOUNCES = 10;
 const float EPSILON = 1.0e-10;
 const float RAY_OFFSET = 1.0e-3;
 const float INFINITY = 1.0 / 0.0;
@@ -160,7 +166,7 @@ const float T_MIN = 1e-3;
 const float T_MAX = INFINITY;
 
 const float PI = 3.14159265358979323846;
-const float TWO_PI  =2.0 * PI;
+const float TWO_PI = 2.0 * PI;
 const float INV_PI = 0.31830988618379067154;
 const float INV_TWO_PI = 0.15915494309189533577;
 const float PI_OVER_TWO = 1.57079632679489661923;
@@ -212,23 +218,18 @@ vec4 sampleTextureAtlas(int textureIndex, vec2 uv) {
 
 #pragma HYDRA include<random.glsl>
 #pragma HYDRA include<intersections.glsl>
-// #pragma HYDRA __include<anyHit.glsl>
 #pragma HYDRA include<closestHit.glsl>
+#pragma HYDRA include<anyHit.glsl>
 #pragma HYDRA include<sample.glsl>
-#pragma HYDRA include<phong.glsl>
 
-vec3 emittedRadiance(IsectInfo isect) {
-  return isect.matProps.emissiveFactor * 2.0;
-}
-
-float powerHeuristic(float p1, float p2) {
-  return (p1 * p1) / (p1 * p1 + p2 * p2);
-}
-
-vec3 sampleBrdf(IsectInfo isect, vec3 wi, vec3 wo) {
+//
+vec3 bsdf(IsectInfo isect, vec3 wi, vec3 wo) {
   // return isect.matProps.albedo * INV_PI;
-  // return vec3(0.5)*INV_PI;
-  return evalPhongBrdf(wi, wo, isect.shadingNormal, isect.matProps.albedo, vec3(0.05), 20.0);
+  float shininess = 20.0;
+  vec3 sp = reflect(wi, isect.shadingNormal);
+  float cosT = dot(sp, wo);
+  
+  return isect.matProps.albedo * INV_PI + vec3(0.05) * (shininess+2.0)*INV_TWO_PI*pow(cosT, shininess);
 }
 
 vec3 sampleEquirectangularMap(sampler2D map, Ray ray) {
@@ -242,26 +243,6 @@ vec3 sampleEquirectangularMap(sampler2D map, Ray ray) {
   vec3 radiance = texture(map, uv).rgb;
   
   return radiance;
-}
-
-vec2 concentricSampleDisk() {
-  float u0 = rand() * 2.0 - 1.0;
-  float u1 = rand() * 2.0 - 1.0;
-  
-  if (u0 == 0.0 && u1 == 0.0) {
-    return vec2(0);
-  }
-  
-  float theta, r;
-  if (abs(u0) > abs(u1)) {
-    r = u0;
-    theta = PI_OVER_FOUR * (u1 / u0);
-  } else {
-    r = u1;
-    theta = PI_OVER_TWO - PI_OVER_FOUR * (u0 / u1);
-  }
-  
-  return r * vec2(cos(theta), sin(theta));
 }
 
 float envMapPdf(Ray ray) {
@@ -289,318 +270,163 @@ float envMapPdf(Ray ray) {
   return pdf;
 }
 
-// importance sample the environment map using pre-computed lookup tables
-vec3 sampleEnvMap(IsectInfo isect, Ray ray) {
-  // sample piecewise-constant inverse CDF lookup tables
-  float v = texture(u_marginalDistribution, vec2(rand(), 0)).x;
-  float u = texture(u_conditionalDistribution, vec2(rand(), v)).x;
-
-  vec2 uv = vec2(u, v);
-  vec3 incomingRadiance = texture(u_envMap, uv).rgb;
-
-  // convert from texture coordinates to spherical coordinates
-  float theta = v * PI;
-  float phi = u * TWO_PI;
-  
-  float sinTheta = sin(theta), cosTheta = cos(theta), sinPhi = sin(phi), cosPhi = cos(phi);
-
-  if (sinTheta == 0.0) {
-    return vec3(0);
-  }
-  
-  // compute pdf by finding product of marginal pdf and conditional pdf
-  float marginalPdf = texture(u_marginalDistribution, vec2(v, 0)).y;
-  float conditionalPdf = texture(u_conditionalDistribution, uv).y;
-  
-  // convert domain from image to solid angle
-  float pdf = (marginalPdf * conditionalPdf * u_hdrRes.x * u_hdrRes.y) / (2.0 * PI * PI * sinTheta);
-  
-  if (pdf == 0.0) {
-    return vec3(0);
-  }
-  
-  // spawn shadow ray
-  vec3 wi = vec3(-sinTheta * cosPhi, cosTheta, -sinTheta * sinPhi);
-  Ray shadowRay = Ray(isect.point + isect.geometricNormal * RAY_OFFSET, wi);
-  
-  // TODO: FIX!!!
-  // if (!anyHit(shadowRay, T_MIN, T_MAX)) {
-  if (false) {
-    vec3 brdf = sampleBrdf(isect, wi, -ray.direction);
-    
-    float cosTheta = CLAMP_DOT(wi, isect.shadingNormal);
-    float bxdfPdf = cosineHemispherePdf(cosTheta);
-    
-    float weight = powerHeuristic(pdf, bxdfPdf);
-    return weight * incomingRadiance * brdf * cosTheta / pdf;
-  }
-  
-  return vec3(0);
+/**
+ * Returns emitted radiance from surface
+ */
+vec3 emittedRadiance(IsectInfo isect) {
+  vec3 radiance = u_emissiveFactor * isect.matProps.emissiveFactor;
+#ifndef DOUBLE_SIDED_EMITTERS
+  return radiance * float(isect.frontFace);
+#else
+  return radiance;
+#endif
 }
 
+//
 vec3 uniformSampleOneLight(IsectInfo isect, Ray ray) {
-  // uniformly sample one light among set of area lights
-  EmissivePrimitive k = u_lights[int(rand() * float(u_numLights))];
-  ShadingTriangle lightSource = getShadingTriangle(k.id);
+  int uRandIdx = int(rand() * float(u_numLights));
   
-  // uniformly sample point on selected light
-  vec3 y = uniformSampleTriangle(lightSource);
+  EmissivePrimitive light = u_lights[uRandIdx];
+  ShadingTriangle prim = getShadingTriangle(light.primitiveId);
+  BlasDescriptor mesh = u_blasDescriptors[light.meshId];
   
-  BlasDescriptor d = u_blasDescriptors[k.blasIndex];
-  y = (d.worldMatrix * vec4(y, 1)).xyz;
-  
+  // generate uniform point on light source & evaluate PDF
+  float pdf;
+  vec3 y = uniformSampleTriangle(prim, mesh, pdf);
   vec3 x = isect.point;
   vec3 xy = y - x;
   
-  // spawn shadow ray
+  // p = p(k) * p(y|k)
+  pdf /= float(u_numLights);
+  
+  // shadow ray
   IsectInfo shadowIsect;
   Ray shadowRay = Ray(x, normalize(xy));
   
-  // determine visibility
-  float v;
   if (closestHit(shadowRay, T_MIN, T_MAX, shadowIsect)) {
-    if (shadowIsect.tri.id == lightSource.id) {
-      vec3 brdf = sampleBrdf(isect, shadowRay.direction, -ray.direction);
-      
+    if (shadowIsect.tri.id == light.primitiveId) {
       float distanceSquared = dot(xy, xy);
       float cosThetaX = CLAMP_DOT(isect.shadingNormal, shadowRay.direction);
-      float cosThetaY = CLAMP_DOT(shadowIsect.geometricNormal, -shadowRay.direction);
-      float bxdfPdf = cosineHemispherePdf(cosThetaX);
-      float pdf = uniformTrianglePdf(lightSource, d) / float(u_numLights);
+      float cosThetaY = CLAMP_DOT(shadowIsect.shadingNormal, -shadowRay.direction);
+      float bsdfPdf = cosineHemispherePdf(cosThetaX);
       
       pdf *= distanceSquared / cosThetaY;
       
-      float weight = powerHeuristic(pdf, bxdfPdf);
-      return weight * emittedRadiance(shadowIsect) * brdf * cosThetaX / pdf;
+      float weight = powerHeuristic2(pdf, bsdfPdf);
+      return weight * emittedRadiance(shadowIsect) * bsdf(isect, shadowRay.direction, -ray.direction) * cosThetaX / pdf;
     }
   }
   
   return vec3(0);
 }
 
-vec3 test[] = vec3[](
-  vec3(1)
-);
-
+// returns RGB/HDR radiance value
 vec3 traceRay(Ray ray) {
-  IsectInfo isect, shadowIsect;
+  IsectInfo isect;
   
   vec3 radiance = vec3(0);
   vec3 throughput = vec3(1);
   
-  // if (closestHit(ray, T_MIN, T_MAX, isect)) {
-  //   vec3 dielectricBrdf = vec3(0);
-  //   vec3 metallicBrdf = vec3(1);
-    
-  //   vec3 brdf = mix(
-  //     dielectricBrdf,
-  //     metallicBrdf,
-  //     isect.matProps.metallicFactor
-  //   );
-    
-  //   return brdf;
-  // } else {
-  //   return vec3(0);
-  // }
-   
-  for (int bounces = 0; bounces < 4; bounces++) {
-    // if (!closestHit_UNSIGNED(ray, T_MIN, T_MAX, isect)) {
-    if (!closestHit(ray, T_MIN, T_MAX, isect)) {
-      // vec3 sky = mix(
-      //   vec3(0.8, 0.6, 0.4),
-      //   vec3(0.1, 0.5, 1),
-      //   smoothstep(-0.5, 0.5, ray.direction.y)
-      // );
-      // return sky * throughput * 1.0;
-      return vec3(0);
-    } else {
-      // return vec3(1);
-      // return vec3(1, isect.uv);
-      vec3 t = 0.5 + 0.5 * isect.geometricNormal;
-      // return vec3(
-      //   mix(vec3(1, 0, 0), vec3(0, 0, 1), t)
-      // );
-      return t;
-    }
-  
-    ray.origin = isect.point;
-    ray.direction = isect.tbn * uniformSampleHemisphere();
-    
-    throughput *= INV_PI * isect.matProps.albedo;
-  }
-  
-  return vec3(0);
-  
-  // return throughput;
-  
-  // return vec3(0);
-  // return throughput;
-  /*return throughput;
-  
-  for (int bounces = 0; bounces < MAX_BOUNCES; bounces++) {
-    if (bounces == 0) {
+  for (int bounce = 0; bounce < MAX_BOUNCES; bounce++) {
+    if (bounce == 0) {
       if (closestHit(ray, T_MIN, T_MAX, isect)) {
-      // if (closestHit_STACK(ray, T_MIN, T_MAX, isect)) {
         radiance += emittedRadiance(isect);
       } else {
+        // check if environment map exists
         break;
       }
     }
     
-    return vec3(1);
+    radiance += uniformSampleOneLight(isect, ray) * throughput;
     
-    // return vec3(isect.uv, 1);
-    return 0.5+0.5*isect.geometricNormal; //* sampleTextureAtlas(isect.mat.baseColorTexture, isect.uv).rgb;
-    // return isect.matProps.albedo;
-    // return vec3(1.0-v);
-    radiance += throughput * uniformSampleOneLight(isect, ray);
-    // return radiance;
-    // return 0.5+0.5*isect.geometricNormal;
-    
+    // Draw random direction "wi" from hemisphere
     vec3 wi = isect.tbn * cosineSampleHemisphere();
-    vec3 brdf = sampleBrdf(isect, wi, -ray.direction);
     
-    float cosThetaX = CLAMP_DOT(isect.shadingNormal, wi);
-    float pdf = cosineHemispherePdf(cosThetaX);
+    // Evaluate cosine correction factor for incoming light
+    float cosTheta = CLAMP_DOT(wi, isect.shadingNormal);
     
-    throughput *= brdf * cosThetaX / pdf;
+    // Update throughput
+    float pdf = cosineHemispherePdf(cosTheta);
+    throughput *= bsdf(isect, wi, -ray.direction) * cosTheta / pdf;
     
+    // Continue path
     ray.origin = isect.point;
     ray.direction = wi;
     
     if (closestHit(ray, T_MIN, T_MAX, isect)) {
+      /**
+       * MIS Weighting
+       */
+       
+      // if next primitive is emissive:
       if (any(greaterThan(isect.matProps.emissiveFactor, vec3(0)))) {
-        float cosThetaY = CLAMP_DOT(isect.geometricNormal, -wi);
-        float areaPdf = uniformTrianglePdf(isect.tri, isect.d) / float(u_numLights);
+        float cosThetaY = CLAMP_DOT(isect.shadingNormal, -wi);
+        float areaPdf = uniformTrianglePdf(isect.tri, isect.mesh) / float(u_numLights);
         
         areaPdf *= pow(isect.t, 2.0) / cosThetaY;
         
-        float weight = powerHeuristic(pdf, areaPdf);
-        radiance += abs(weight * emittedRadiance(isect) * throughput);
-        // return vec3(weight);
-        // return any(lessThan(radiance, r)) ? vec3(1, 0, 0) : vec3(1);
+        float weight = powerHeuristic2(pdf, areaPdf);
+        radiance += weight * emittedRadiance(isect) * throughput;
       }
+      
+      /**
+      * Russian roulette survival probability may be any number in [0, 1] and
+      * estimator will remain unbiased.
+      * Survival probability is inversely proportional to throughput,
+      * which is itself dependent on the BSDF & cosine factor (good strategy)
+      */
+#ifdef RUSSIAN_ROULETTE
+      float russianRoulette = max(max(throughput.r, throughput.g), throughput.b);
+      if (rand() > russianRoulette) {
+        break;
+      }
+      
+      throughput /= russianRoulette;
+#endif
     } else {
-      // float envPdf = envMapPdf(ray);
-      
-      // if (envPdf == 0.0) {
-      //   break;
-      // }
-      
-      // float weight = powerHeuristic(pdf, envPdf);
-      // radiance += 1.0 * sampleEquirectangularMap(u_envMap, ray) * throughput;
-      // radiance += 0.5*throughput;
+      // check if environment map exists
       break;
     }
-    
   }
   
   return radiance;
-  // return vec3(1);
-  
-  // IsectInfo isect, shadowIsect;
-  // vec3 radiance = vec3(0);
-  // vec3 throughput = vec3(1);
-  
-  // for (int bounces = 0; bounces < MAX_BOUNCES; bounces++) {
-  //   if (bounces == 0) {
-  //     if (closestHit(ray, T_MIN, T_MAX, isect)) {
-  //       radiance += emittedRadiance(isect);
-  //     } else if (u_useEnvMap) {
-  //       // radiance += sampleEquirectangularMap(u_envMap, ray);
-  //       break;
-  //     } else {
-  //       break;
-  //     }
-  //   }
-    
-  //   // return 0.5+0.5*isect.geometricNormal;
-  //   // account for contribution of direct illumination
-  //   // if (u_useEnvMap) {
-  //   //   radiance += throughput * sampleEnvMap(isect, ray);
-  //   // }
-    
-  //   // radiance += throughput * uniformSampleOneLight(isect, ray);
-  //   // return radiance;
-    
-  //   // account for contribution of indirect illumination
-  //   vec3 wi = isect.tbn * cosineSampleHemisphere();
-  //   vec3 brdf = sampleBrdf(isect, wi, -ray.direction);
-    
-  //   float cosThetaX = CLAMP_DOT(isect.shadingNormal, wi);
-  //   float pdf = cosineHemispherePdf(cosThetaX);
-    
-  //   if (pdf == 0.0) {
-  //     break;
-  //   }
-    
-  //   throughput *= brdf * cosThetaX / pdf;
-    
-  //   ray.direction = wi;
-  //   ray.origin = isect.point;
-    
-  //   // apply appropriate MIS weights to BXDF contribution
-  //   if (closestHit(ray, T_MIN, T_MAX, isect)) {
-  //     if (any(greaterThan(isect.matProps.emissiveFactor, vec3(0)))) {
-  //       float cosThetaY = CLAMP_DOT(isect.geometricNormal, -wi);
-  //       // float areaPdf = uniformTrianglePdf(isect.tri) / float(u_numLights);
-        
-  //       // areaPdf *= pow(isect.t, 2.0) / cosThetaY;
-        
-  //       // float weight = powerHeuristic(pdf, areaPdf);
-  //       radiance += 1.0 * emittedRadiance(isect) * throughput;
-  //     }
-  //   } else if (u_useEnvMap) {
-  //     // float envPdf = envMapPdf(ray);
-      
-  //     // if (envPdf == 0.0) {
-  //     //   break;
-  //     // }
-      
-  //     // float weight = powerHeuristic(pdf, envPdf);
-  //     // radiance += 1.0 * sampleEquirectangularMap(u_envMap, ray) * throughput;
-  //     break;
-  //   } else {
-  //     break;
-  //   }
-  // }
-  
-  // return radiance;*/
 }
 
-vec3 _traceRay(Ray ray) {
-  IsectInfo isect, shadowIsect;
+vec3 traceRay_CMP(Ray ray) {
+  IsectInfo isect;
+  
   vec3 radiance = vec3(0);
   vec3 throughput = vec3(1);
-  float v;
-  for (int bounces = 0; bounces < MAX_BOUNCES; bounces++) {
-    if (!closestHit(ray, T_MIN, T_MAX, isect)) {
-      // radiance += throughput * 0.5;
-      // radiance += throughput * sampleEquirectangularMap(u_envMap, ray);
+  
+  for (int bounce = 0; bounce < MAX_BOUNCES; bounce++) {
+    if (closestHit(ray, T_MIN, T_MAX, isect)) {
+        
+      // Draw random direction "wi" from hemisphere
+      vec3 wi = isect.tbn * uniformSampleHemisphere();
+      
+      // Evaluate cosine correction factor for incoming light
+      float cosTheta = CLAMP_DOT(wi, isect.shadingNormal);
+      
+      // Update throughput
+      float pdf = uniformHemispherePdf();
+      radiance += emittedRadiance(isect) * throughput;
+      throughput *= bsdf(isect, wi, -ray.direction) * cosTheta / pdf;
+      
+      // Continue path
+      ray.origin = isect.point;
+      ray.direction = wi;
+    } else {
+      if (u_useEnvMap) {
+        radiance += sampleEquirectangularMap(u_envMap, ray) * throughput;
+      }
       break;
     }
-    
-    // return vec3(1);
-    // return 0.5+0.5*isect.geometricNormal;
-    // return isect.matProps.albedo;
-    
-    vec3 wi = isect.tbn * uniformSampleHemisphere();
-    vec3 brdf = isect.matProps.albedo * INV_PI;
-    float cosTheta = CLAMP_DOT(isect.geometricNormal, wi);
-    float pdf = uniformHemispherePdf();
-    
-    radiance += emittedRadiance(isect) * throughput;
-    throughput *= brdf * cosTheta / pdf;
-    
-    ray.origin = isect.point;
-    ray.direction = wi;
   }
   
   return radiance;
 }
 
 Ray generateRay() {
-#define MSAA
 #ifdef MSAA
   vec2 uv = (gl_FragCoord.xy + vec2(rand(), rand())) / u_resolution;
 #else
@@ -621,17 +447,21 @@ Ray generateRay() {
   return ray;
 }
 
-// #define REPLACE_NANS
-#define INTEGRATOR traceRay
+#define CMP_PATTERN() (mod(gl_FragCoord.x, CMP_TILE_SIZE) > CMP_TILE_SIZE / 2.0 == mod(gl_FragCoord.y, CMP_TILE_SIZE) > CMP_TILE_SIZE / 2.0)
 
 void main() {
   seedRand();
   Ray ray = generateRay();
   
+#ifdef CMP_INTEGRATOR
+  vec3 color = CMP_PATTERN() ? INTEGRATOR(ray) : CMP_INTEGRATOR(ray);
+#else
   vec3 color = INTEGRATOR(ray);
-  fragment = vec4(color, 1);
+#endif
+
+fragment = vec4(color, 1);
   
-#ifdef REPLACE_NANS
+#ifdef KILL_NANS
   if (any(isnan(color))) {
     fragment = vec4(0, 0, 0, 1);
   }
