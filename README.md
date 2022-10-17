@@ -1,54 +1,81 @@
-# Hydra
-![Cornell Box](https://user-images.githubusercontent.com/47622452/189471123-12dec791-13b7-41aa-8e5f-97504bac575a.png)
+# [Hydra](https://saaaji.github.io/hydra/src/)
 ### A pathtracer implemented in JavaScript using the WebGL 2 API
+![Preview Image](https://user-images.githubusercontent.com/47622452/193398278-601ac33f-7ad9-49a9-ade4-b636312eead3.png)
 ## README Contents
+1. [Overview](#overview)
 2. [Features](#features)
 3. [Usage](#usage)
 4. [Retrospective](#retrospective)
-5. [Gallery](#gallery)
+5. [Resources](#resources)
+6. [Gallery](#gallery)
+## Overview
+A pathtracer generates photorealistic images given a scene description (i.e. a 3D model) as input; it simulates the propagation of light and its interactions with different surfaces, creating realistic results. I began working on this renderer during my sophomore year of high school, and expanded on it over time in painfully small increments; I originally envisioned it as a proof-of-concept implementation of *Ray Tracing in One Weekend* in JavaScript and WebGL, though it really became an outlet for me to implement different techniques as I learned more about the field of computer graphics. The end result may not necessarily be impressive or particularly performant, but it was and continues to be a very valuable "educational experiment" of sorts.
 ## Features
-The application implements the following features:
-- [x] `glTF` Support
-  - Supported attributes: `POSITION`, `NORMAL`, `TEXCOORD_0`
-  - Materials
-- [ ] `HDRi` Support (Environment Maps)
-- [x] Binary BVH (with binned SAH)
-- [x] 2-Level BVH (Mesh Instancing)
-  - "Preview" mode: rearrange meshes in scene via access to scenegraph
+- [x] Progressive, tiled renderer
+- [x] Basic `glTF`/`GLB` Support
+- [ ] Basic `HDRi` Support (Environment Maps)
+- [x] Acceleration via Binary BVH (Binned SAH)
+- [x] 2-Level BVH (TLAS/BLAS, Mesh Instancing)
+- [x] Basic Editor
+  - Manipulate TRS (translation-rotation-scale) matrices of scene-graph nodes and rebuild TLAS
+  - Camera visualizations (frustums, focal plane adjustments)
 - [ ] PBR Materials (`glTF` Metallic-Roughness Physically-Based BRDF)
-- [ ] Importance Sampling (Cosine-Weighted)
+- [ ] Importance Sampling
 - [ ] Next Event Estimation (NEE)
 - [ ] Multiple Importance Sampling (MIS)
+- [ ] Area Lights
+- [ ] "Ideal" Lights (point, directional, spot)
 ## Usage
-TBD
+![Editor Screenshot](https://user-images.githubusercontent.com/47622452/193397520-ddbaabb7-13f5-4968-b9cc-42427cf6eca0.png)
+
+Check out the renderer [here](https://saaaji.github.io/hydra/src/). The functionality of the renderer has been divided across several panels. Refer to the screenshot above and the descriptions below:
+ - __Render Settings__: The place to upload scene files and configure the renderer. At the moment, the only type of asset accepted is the internal `hydra` format; refer to __Export Settings__ for generation of `hydra` files. The output resolution is specified along with the number of vertical and horizontal tiles, as the renderer is tiled. The specified output resolution should be divisible by the tile counts for intended functionality. Note the "Emissive factor" setting: currently, only area lights are supported. These are defined as any emissive triangles in the original model, whose emissive factors are clamped to the range [0, 1]. An emissive scaling factor may therefore be provided to overcome this limitation.
+ - __Export Settings__: The place to generate `hydra` files from `glb` models. Any `glb` model should work, though some limitations exist: the model should contain at least one camera for the renderer to use, and only area lights, defined as any emissive primitives, are supported at the moment. A BVH is generated for each mesh within the scene, so this step may take a minute or so. When done exporting, a download link will appear in __Console__. For convenience, some example `hydra` files are provided [here](https://drive.google.com/drive/folders/1L1r4cadR1IrMpzPkUwzw56M6XGUjH9nv?usp=sharing).
+ - __Viewport__: The place where you can preview and render the scene. Some important key bindings are provided below:
+   - <kbd>r</kbd>: Toggles between "preview" mode and "render" mode
+   - <kbd>p</kbd>: Pauses the renderer, regardless of the current mode
+   - <kbd>d</kbd>: Saves the image when in "render" mode and logs a download link in __Console__
+   - <kbd>t</kbd>: Shows reference for all key bindings
+ - __Console__: The place where any debug info or resources are logged. Look here for download links for saved snapshots or completed `hydra` files.
+ - __Node Tree__: The place where you can navigate the scene-graph and inspect nodes. Nodes with a "branch" or "fork" icon may be expanded to reveal any children; nodes with the "leaf" icon are leaf nodes. To inspect a node, select its name and its info will appear in __Active Node__
+ - __Active Node__: The place where you can modify the TRS (translation-rotation-scale) matrix of any scene-graph node. This will prompt a TLAS rebuild. Additionally, the focal distance and lens radius of any `CameraNode` may be modified.
 ## Retrospective
 ### Why?
-This project began as an implementation of *Ray Tracing in One Weekend*; I envisioned it as a proof of concept that could demonstrate how raytracing might be achieved with WebGL 2 (though this concept had long been proven on  Shadertoy, whose existence I was not initially aware of). Over time, as I worked on the renderer intermittently, it grew into what it is now without any real plan, and as such I thought it might be helpful or at least interesting to include a retrospective where I could go back and  analyze design decisions that may have appeared haphazard in the moment.
-### Evolution of the Bounding Volume Hierarchy
-![BVH Heatmap](https://user-images.githubusercontent.com/47622452/189471526-35ea225c-3b99-4d6b-87b6-c6b460c3541c.png)
-
-The first modification I made to the base renderer of *RTIOW* was the addition of an acceleration structure, particularly a bounding volume hierarchy, as I realized intersection times would serve as the primary limiting factor on the spectacle of my renders--and it has since become the system that has undergone the most changes over the entire development period.
-#### 1. Traversing a binary BVH in a fragment shader
-![Crash](https://user-images.githubusercontent.com/47622452/189471026-29487f52-ec90-48ce-a2a5-7b228de5d0ce.png)
-> First successful BVH test
-
-Given that all my WebGL knowledge was sourced from *webgl2fundamentals*, the task of traversing a binary tree in a fragment shader was initially very daunting. Firstly, achieving this requires treating textures as arbitrary buffers (a concept which was then a novelty to me) via macros that allow for indexing into a texture as though it were a 1D array of texels. A binary BVH can then be flattened, and given the need to encode an AABB (min/max `vec3`'s require 3 channels each), 2 floating-point RGBA texels (`RGBA16F`/`RGBA32F`) are required per node at a minimum, with 2 channels remaining for child offsets or primitive IDs. One channel is reserved for the offset ("pointer") to the "right" child; since nodes are arranged according to depth-first order, the "left" child immediately follows its parent, making it possible to store just a singular offset. Thus the primitive ID is assigned to the final channel. This linear representation dictates an iterative traversal algorithm (recursion is disallowed in GLSL shaders regardless), which resembles the typical stack-based, depth-first BST traversal scheme. BVH construction was comparatively simple, though I implemented the Surface Area Heuristic (SAH), using *PBRT* as a reference, to create relatively high-quality trees.
-|Texel Index|R|G|B|A|
-|:-:|:-:|:-:|:-:|:-:|
-|Even index *n*|`min.x`|`min.y`|`min.z`|`rightChildIndex`|
-|*n* + 1|`max.x`|`max.y`|`max.z`|`primitiveId`|
-> BVH node encoding
-
-#### 2. First optimizations--stackless traversal
+The purpose of this renderer was largely educational, so I thought it might be appropriate to document any challenges I encountered or things that I learned. This section is largely just for me to refer back to in the future, but others may find something of value in it.
+### Notes on the Bounding Volume Hierarchy
+#### Traversing a binary BVH in a fragment shader
+The first modification I made to the base renderer of *RTIOW* was the addition of a BVH, and it has undergone many changes since. Given that all my knowledge of WebGL was sourced from *webgl2fundamentals*, the task of traversing a binary BVH in a fragment shader was initially very daunting. Achieving this required treating textures as buffers and "indexing" into them as though they were 1D arrays of texels. A flattened BVH (with its nodes in depth-first order) can then be uploaded to a texture, with each node requiring 2 floating-point RGBA texels (`RGBA32F`). This linear representation dictated an iterative traversal algorithm (and recursion is disallowed in GLSL shaders anyways), which resembled the typical stack-based, depth-first BST traversal scheme.
+#### Stackless traversal
 The above implementation would have remained unchanged had I not come across the following diagram on discord (recreation):
-![threaded_bvh](https://user-images.githubusercontent.com/47622452/189472989-57a5741e-e50a-4c04-a864-27a7dcef5079.png)
 
-Instead of relying upon a stack to traverse the BVH, this prospective stackless BVH utilizes "miss links" to bypass subtrees whenever the ray misses bounding boxes or primitives, rendering a stack unnecessary. These so-called miss links could be calculated by simply adding the number of child nodes to the current index (`currentIndex + 2 * nodeCount - 1`), essentially serving as an offset to an adjacent branch. The caveat, however, is that the traversal order remains fixed (the hierarchy must be traversed according to depth-first order), though my initial stack-based algorithm was fixed regardless.
-#### 3. Traversing a 2-level BVH in a fragment shader
-Since BVH construction could take several minutes for larger scenes, real-time, or at least interactive modification of scenes (given an offline construction algorithm) necessitated dividing the BVH into a top-level acceleration structure (TLAS) which stored a series of bottom-level hierarchies (BLAS), each storing triangle primitives. Assuming the amount of individual meshes is a mere fraction of the total amount of triangle primitives, reconstructing the TLAS in real-time is trivial. My initial naive solution was to define another function for traversing the TLAS, which passes control to a BLAS intersection function, which then passes control again to a triangle intersection function. Unsurprisingly, this was rather slow, necessitating that TLAS and BLAS traversal be handled in a single loop. Once the bottom level of the TLAS is reached, the ray is transformed from world space into object space and intersected with a BLAS; once BLAS traversal has ended, traversal of the TLAS is resumed via a cached index and the ray is reset.
-#### 4. Revisiting the stack
-The traversal algorithm for the 2-level hierarchy introduced additional complexity and was therefore considerably slower than its singular-hierarchy counterpart. This slowdown prompted me to experiment again with a stack-based algorithm that took advantage of a flexible traversal order. The underlying principle is that by traversing nodes in a front-to-back order (as determined by the direction of the ray), occluded nodes are more easily skipped, eliminating unnecessary intersections with triangle primitives. However, fixed order traversal proved to be the most efficient, to my surprise--even fixed stack-based traversal was faster than flexible stack-based traversal. My best guess (if it can be called that) is that texture access poses as the primary bottleneck, and relying on depth-first order maximizes the cache hit rate across all threads, because the left child is adjacent to its parent in memory. However, these comparisons were founded upon a very rudimentary profiling system (utilizing the `EXT_disjoint_timer_query_webgl2` extension) and a very limited set of test scenes; this analysis of cache interactions is itself limited by my lack of understanding of the underlying hardware. So I am reluctant to make any conclusions about the relative performance of each method.
-### Intermediate Scene Representation (`.hydra`)
-While the BVH considerably improved the efficiency of the renderer, it was not without a tradeoff: long tree construction times that could reach several minutes for scenes of moderate complexity. It did not help that the construction method was and remains relatively unoptimized, in part because I began relying on an intermediate scene representation that made repeated construction unnecessary--I figured that the texel data for a BVH could just be dumped to a binary file and loaded whenever necessary. And doing so became increasingly necessary in order to more rapidly debug the actual light transport simulation. However, for the renderer to actually achieve its task, the raw geometric data could not just be decoupled from other aspects of the scene, like object hierarchies, material properties, and additional vertex attributes. Thus some semblance of organization was required, which I achieved via a JSON metadata section, which in turn described how to extract data from a binary section (taking heavy inspiration from the `glTF` format, which was in part designed for ease of use with JavaScript). The extracted data could then be  uploaded directly to the GPU via various `bufferData` and `texImage` calls. I wonder if the additional time invested into supporting what was essentially a new file format was justified, or if it may have been simpler to just optimize the binned-SAH construction method.
+![Stackless Tree](https://user-images.githubusercontent.com/47622452/193397683-d78e6e12-cd6a-4eda-a02c-705ab110b8de.png)
+
+Instead of relying upon a stack to traverse the BVH, the "stackless" BVH relies on "miss-links" (indicated in red) to bypass subtrees within the BVH whenever the ray misses AABBs or primitives. This eliminates the overhead of having to maintain a stack. The caveat is that the traversal order remains fixed, and the tree must be traversed in depth-first order (as indicated by the green arrows). However, my initial stack-based implemention had a fixed order anyways, and the performance gains were immediate.
+
+#### 2-level BVH
+My BVH construction remained relatively unoptimized, and could take several minutes for scenes of moderate complexity. To allow for interactive modification of scenes, the BVH had to be divided into a top-level acceleration structure ("TLAS"), which stored a series of bottom-level acceleration structures ("BLAS"). Given the amount of meshes in a scene is negligible relative to the total amount of triangle primitives, reconstructing the TLAS in real-time is trivial. However, this impacted traversal times, as now TLAS and BLAS traversal had to be handled in a single loop. Once the bottom level of the TLAS is reached, the ray is transformed from world- to object-space and intersected with a BLAS; once BLAS traversal has ended, TLAS traversal is resumed via a cached index and the ray is reset. This introduced additional complexity and was therefore noticeably slower than its single-hierarchy counterpart. I decided to experiment with stack-based traversal again, this time taking advantage of the flexible traversal order permitted by a stack; if nodes are traversed in a front-to-back order (as determined by the direction of the ray and the split axis of the node), occluded nodes are skipped more easily, eliminating unnecessary intersections. Surprisingly, however, fixed-order traversal appeared to be fastest, and any stack-based implementation was outperformed by the prior stackless scheme:
+
+![Performance Results](https://user-images.githubusercontent.com/47622452/193425200-99d692f2-9999-4c5c-beb1-0c58386aac2a.png)
+
+My best guess at the moment is that texture access poses as the primary bottleneck (which may be unique to GLSL ES 3.0, as modern APIs with compute have access to SSBOs), and relying on a fixed, depth-first traversal order helps maximize the cache hit-rate acrosss all threads, because one child is always adjacent to its parent in memory. Later stack-based tests with a depth-first memory layout seem to confirm this, though this analysis is limited by my lack of understanding of the underlying hardware. Moreover, I relied on a very limited set of test scenes to make this comparison and a rudimentary profiling system (`EXT_disjoint_timer_query_webgl2` query results). I also performed these tests on a Chromebook only. In other words, I am reluctant to make any conclusions about the relative performance of each method at this time, and I think this experience has definitely demonstrated the need for an adequate profiler.
+#### The Editor
+I had implemented a 2-level BVH, but it was virtually useless without some way to modify meshes in the TLAS; a functional editor where the user could modify the TRS matrices of scene-graph nodes was necessary, so I decided to implement a rasterized "preview" mode where objects could be moved, rotated, and scaled before actually rendering the scene. Luckily, the geometric data that I had been storing in textures could be easily uploaded to vertex buffers, as demonstrated in this early test:
+|![Pathtraced Side-By-Side](https://user-images.githubusercontent.com/47622452/189471172-0f4c8a29-13d9-4200-bbe5-cbedf7a90d97.png)|![Rasterized Side-By-Side](https://user-images.githubusercontent.com/47622452/189471155-cc949008-73ec-42ae-bda6-4208302a147d.png)|
+|:-:|:-:|
+|*Pathtraced Image*|*Rasterized Preview*|
+
+Later, I decided that the preview should not be too detailed or have complex shading (partly because I wanted to get back to actual pathtracing); its purpose should be to convey geometric and spatial information to the user, which I tried to achieve primarily through highlights and outlines. There was also the added benefit of easily visualizing camera parameters, especially the focal distance:
+
+![Preview](https://user-images.githubusercontent.com/47622452/193426914-217c5849-8b2a-4cf4-aad9-3ce592554069.png)
+### Rendering Abstraction
+Once I decided implement the rasterized preview mode discussed above, I found that it was no longer feasible to hardcode every render pass, especially with an outline shader that necessitated the creation of a G-buffer. This problem could only be solved with some sort of rendering abstraction that would simplify the management of resources and render passes. Really, this solution was THREE, but in proper [NIH](https://en.wikipedia.org/wiki/Not_invented_here) fashion I decided to make something myself, and discovered a [GDC presentation](https://www.gdcvault.com/play/1w024612/FrameGraph-Extensible-Rendering-Architecture-in) by EA/DICE on "render graphs." What I took away from this was that a single frame can be modeled as a [directed acyclic graph (DAG)](https://en.wikipedia.org/wiki/Directed_acyclic_graph), where the nodes, or individual render passes, are connected by resources (textures in this context), which serve as the edges. The passes can then be [topologically ordered](https://en.wikipedia.org/wiki/Topological_sorting), iterated over, and executed to produce the final frame. From what I can tell, this organization is meant to be implemented in modern APIs, but in my case it seemed to provide a nice balance between higher-level resource management and lower-level control of the pipeline. I don't know if what I implemented is really a "render graph" per se, but I definitely took inspiration from the original presentation.
+### `.hydra`
+As discussed in __[Usage](#usage)__, the renderer only accepts `hydra` files at the moment. This is not a standard format; in fact, it is an internal format used only within this renderer. Early on in development, it became very inconvenient to wait on long BVH construction times in order to debug the light transport simulation, so I decided to dump all geometric and BVH data into a binary which could then be uploaded whenever necessary. Any metadata or additional model information, like material properties, were stored in a JSON header, and over time this format came to closely resemble the `glTF` format (which was designed in part for ease of use with JavaScript). All vertex attributes and hierarchy data are stored in a binary section, and all textures are packed into a single atlas (2048x2048xN `TEXTURE_2D_ARRAY`). A consequence of this organization is that all textures have the same wrapping and filtering settings, and high-resolution maps are disallowed (this is a consequence of GLSL ES 3.0 not supporting dynamic indexing into arrays of samplers).
+## Resources
+ - [Graphics Programming Discord](https://graphics-programming.org/)
+ - [Raytracing in One Weekend](https://raytracing.github.io/)
+ - [PBR Book](https://pbr-book.org/)
+ - Advanced Global Illumination, 2nd Edition
+ - Real-Time Rendering, 4th Edition
 ## Gallery
 TBD
