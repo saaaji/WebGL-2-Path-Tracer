@@ -1,5 +1,5 @@
 # [WebGL-2-Path-Tracer](https://saaaji.github.io/WebGL-2-Path-Tracer/src/)
-### A pathtracer implemented in JavaScript using the WebGL 2 API
+### A path tracer implemented in JavaScript using the WebGL 2 API
 ![Preview Image](https://user-images.githubusercontent.com/47622452/193398278-601ac33f-7ad9-49a9-ade4-b636312eead3.png)
 ## README Contents
 1. [Overview](#overview)
@@ -9,7 +9,7 @@
 5. [Resources](#resources)
 6. [Gallery](#gallery)
 ## Overview
-A pathtracer generates photorealistic images given a scene description (i.e. a 3D model) as input; it simulates the propagation of light and its interactions with different surfaces, creating realistic results. I began working on this renderer during my sophomore year of high school, and expanded on it over time in painfully small increments; I originally envisioned it as a proof-of-concept implementation of *Ray Tracing in One Weekend* in JavaScript and WebGL, though it really became an outlet for me to implement different techniques as I learned more about the field of computer graphics. The end result may not necessarily be impressive or particularly performant, but it was and continues to be a very valuable "educational experiment" of sorts.
+A path tracer generates photorealistic images given a scene description (i.e. a 3D model) as input; it simulates the propagation of light and its interactions with different surfaces, creating realistic results. I began working on this renderer during my sophomore year of high school, and expanded on it over time in painfully small increments; I originally envisioned it as a proof-of-concept implementation of *Ray Tracing in One Weekend* in JavaScript and WebGL, though it really became an outlet for me to implement different techniques as I learned more about the field of computer graphics. The end result may not necessarily be impressive or particularly performant, but it was and continues to be a very valuable "educational experiment" of sorts.
 ## Features
 - [x] Progressive, tiled renderer
 - [x] Basic `glTF`/`GLB` Support
