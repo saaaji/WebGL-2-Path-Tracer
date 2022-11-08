@@ -13,17 +13,17 @@ A path tracer generates photorealistic images given a scene description (i.e. a 
 ## Features
 - [x] Progressive, tiled renderer
 - [x] Basic `glTF`/`GLB` Support
-- [ ] Basic `HDRi` Support (Environment Maps)
+- [x] Basic `HDRi` Support (Environment Maps)
 - [x] Acceleration via Binary BVH (Binned SAH)
 - [x] 2-Level BVH (TLAS/BLAS, Mesh Instancing)
 - [x] Basic Editor
   - Manipulate TRS (translation-rotation-scale) matrices of scene-graph nodes and rebuild TLAS
   - Camera visualizations (frustums, focal plane adjustments)
 - [ ] PBR Materials (`glTF` Metallic-Roughness Physically-Based BRDF)
-- [ ] Importance Sampling
-- [ ] Next Event Estimation (NEE)
-- [ ] Multiple Importance Sampling (MIS)
-- [ ] Area Lights
+- [x] Importance Sampling
+- [x] Next Event Estimation (NEE)
+- [x] Multiple Importance Sampling (MIS)
+- [x] Area Lights
 - [ ] "Ideal" Lights (point, directional, spot)
 ## Usage
 ![Editor Screenshot](https://user-images.githubusercontent.com/47622452/193397520-ddbaabb7-13f5-4968-b9cc-42427cf6eca0.png)
