@@ -39,7 +39,6 @@ html, body {
   display: flex;
   flex-direction: column;
   flex-grow: 1;
-  overflow-y: scroll;
   max-height: 100%;
 }
 
@@ -50,6 +49,7 @@ html, body {
   border-radius: 0.1em;
   margin: 0.1em;
   padding: 0.5em;
+  overflow-y: scroll;
   background-color: #383838;
 }
 
@@ -77,6 +77,10 @@ html, body {
   width: 50%;
   display: flex;
   align-items: center;
+}
+
+.ui-content-row label.mono {
+  font-family: var(--font-family-monospace);
 }
 
 .ui-content-row label img {
@@ -128,6 +132,21 @@ html, body {
   font-family: var(--font-family-monospace);
   font-size: var(--font-size);
   text-overflow: ellipsis;
+}
+
+.ui-content-row.image {
+  background-color: #272727;
+  flex-direction: column;
+  align-items: flex-start;
+  border: 1px solid var(--border-color);
+  overflow: scroll;
+  padding: 5px;
+  border-radius: 0.2em;
+  margin: 0.2em;
+}
+
+.ui-content-row.image canvas {
+  align-self: center;
 }
 
 .ui-content-row select option:hover {
@@ -350,6 +369,7 @@ html, body {
 
 /* Scene Graph (Node Tree) */
 #node-tree-container {
+  min-height: 10%;
   overflow: scroll;
 }
 

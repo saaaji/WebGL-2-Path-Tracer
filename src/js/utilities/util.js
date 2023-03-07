@@ -9,6 +9,13 @@ export const canvasToBlob = (canvas, mimeType = 'image/png', quality = 1) => new
   canvas.toBlob(blob => resolve(blob), mimeType, quality);
 });
 
+export const jsonToBlob = json => new Blob(
+  [new TextEncoder().encode(json)], 
+  {
+    type: 'application/json;charset=utf-8'
+  }
+);
+
 export const createEnum = (...values) => Object.fromEntries(values.map(val => [val, Symbol(val)]));
 
 // image (de)serialization

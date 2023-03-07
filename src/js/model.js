@@ -896,17 +896,17 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
   
-  async serialize() {
+  async serialize(frame = 'rtx', pass = 'tonemap-pass', dimensions = this.dimensions) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     const gl = this.gl;
-    const [width, height] = this.dimensions;
+    const [width, height] = dimensions;
     const data = new Uint8Array(width * height * 4);
     const imageData = ctx.createImageData(width, height);
     const sampleCount = this.sampleCount;
     
     // read pixels from copy-target
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fg.getFramebuffer('rtx', 'tonemap-pass'));
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fg.getFramebuffer(frame, pass));
     gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, data);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     

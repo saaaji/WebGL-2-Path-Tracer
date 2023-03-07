@@ -143,7 +143,7 @@ export class TreeViewer extends HTMLElement {
   }
   
   set tree(sceneGraph) {
-    if (sceneGraph && sceneGraph instanceof SceneGraphNode) {
+    if (sceneGraph) {
       this.#root.classList.remove('empty');
       
       this.#tree = sceneGraph;
