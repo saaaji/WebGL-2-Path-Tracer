@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>hydra-WGLRT</title>
+    <title>WGL</title>
     <link rel='stylesheet' type='text/css' href='./css/hydra.css'/>
     <!--Import tree viewer element for scene graph-->
     <script src='./js/utilities/TreeViewer.js' type='module'></script>
@@ -14,7 +14,7 @@
           <div class='ui-section-content'>
             <div class='ui-content-row'>
               <label for='import-scene'>Import scene (<span class='mono-label'>.hydra</span>)</label>
-              <input id='import-scene' type='file' accept='.hydra'/>
+              <input id='import-scene' type='file' multiple/>
             </div>
             <div class='ui-content-row'>
               <label for='import-default-scene'>Choose default scene</label>
@@ -125,7 +125,7 @@
             <tree-viewer id='tree-viewer'></tree-viewer>
           </div>
         </div>
-        <div class='ui-section'>
+        <div class='ui-section' id='active-node'>
           <div class='ui-section-title'>Active Node</div>
           <div class='ui-section-content empty' id='active-node-container'>
             No Selection

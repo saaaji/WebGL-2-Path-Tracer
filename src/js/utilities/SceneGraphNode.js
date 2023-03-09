@@ -10,7 +10,37 @@ const onScaleChange = Symbol('onScaleChange');
 const onEulerChange = Symbol('onEulerChange');
 const onQuaternionChange = Symbol('onQuaternionChange');
 
-export class SceneGraphNode {
+export class Node {
+  // id for picking
+  id = 'NODE-' + Math
+    .random()
+    .toString(36)
+    .substr(2, 9)
+    .toUpperCase();
+    
+  name = 'Node';
+  
+  parent = null;
+  children = [];
+  
+  constructor(...children) {
+    children.forEach(child => this.addChild(child));
+  }
+  
+  addChild(child) {
+    child.parent = this;
+    this.children.push(child);
+  }
+  
+  // return collection of all nodes under this node
+  get nodes() {
+    const nodes = [...this.children];
+    this.children.forEach(child => nodes.push(...child.nodes));
+    return nodes;
+  }
+}
+
+export class SceneGraphNode extends Node {
   static [ActiveNodeEditor.editableProperties] = [
     {prop: 'type', mutable: false, displayName: 'Type'},
     {prop: 'name', mutable: false, displayName: 'Name'},
@@ -38,9 +68,6 @@ export class SceneGraphNode {
     this.update();
   }
   
-  parent = null;
-  children = [];
-  
   worldMatrix = new Matrix4();
   matrix = new Matrix4();
   
@@ -50,13 +77,6 @@ export class SceneGraphNode {
   
   #quat = new Quaternion();
   
-  // id for picking
-  id = 'NODE-' + Math
-    .random()
-    .toString(36)
-    .substr(2, 9)
-    .toUpperCase();
-  
   // construct from JSON-friendly descriptor
   constructor({
     matrix,
@@ -65,6 +85,8 @@ export class SceneGraphNode {
     scale = [1, 1, 1],
     name = 'Node',
   } = {}) {
+    super();
+    
     this.name = name;
     
     if (matrix) {
@@ -116,14 +138,7 @@ export class SceneGraphNode {
       })),
     };
   }
-  
-  // return collection of all nodes under this node
-  get nodes() {
-    const nodes = [...this.children];
-    this.children.forEach(child => nodes.push(...child.nodes));
-    return nodes;
-  }
-  
+
   // string tag for serialization
   get type() {
     return 'SceneGraphNode';

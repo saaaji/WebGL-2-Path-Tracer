@@ -3,6 +3,7 @@ export class ActiveNodeEditor {
   
   static editableProperties = Symbol('editableProperties');
   static createCustomDOM = Symbol('createCustomDOM');
+  static bubbleBottom = Symbol('bubbleBottom');
   
   static getDefault() {
     return ActiveNodeEditor.#DEFAULT_INSTANCE;
@@ -51,15 +52,22 @@ export class ActiveNodeEditor {
     if (node) {
       this.#container.classList.remove('empty');
       
-      const props = node.constructor[ActiveNodeEditor.editableProperties].sort(({mutable: mutableA}, {mutable: mutableB}) => {
-        if (mutableA === mutableB) {
-          return 0
+      const props = node.constructor[ActiveNodeEditor.editableProperties].sort((a, b) => {
+        const {mutable: mutableA, bubble: bubbleA = false} = a;
+        const {mutable: mutableB, bubble: bubbleB = false} = b;
+        
+        if (bubbleA !== bubbleB) {
+          return bubbleA ? +1 : -1;
         } else {
-          return mutableA ? +1 : -1;
+          if (mutableA === mutableB) {
+            return 0
+          } else {
+            return mutableA ? +1 : -1;
+          }
         }
       });
       
-      for (const {prop, mutable, displayName = prop, triggerUpdate = false} of props) {
+      for (const {prop, mutable, displayName = prop, triggerUpdate = false, mono = false} of props) {
         const value = this.#getProp(node, prop);
         const type = typeof value;
           
@@ -77,6 +85,9 @@ export class ActiveNodeEditor {
           const input = document.createElement('input');
           
           label.textContent = displayName;
+          if (mono) {
+            label.classList.add('mono');
+          }
           
           let typecast = value => value;
           switch (type) {
@@ -105,6 +116,12 @@ export class ActiveNodeEditor {
           if (!mutable) {
             uiRow.classList.add('readonly');
           } else {
+            input.addEventListener('keydown', e => {
+              if([38, 40].indexOf(e.keyCode) > -1){
+                e.preventDefault();
+              }
+            });
+            
             input.addEventListener('change', e => {
               this.#setProp(node, prop, typecast(e.target));
               if (triggerUpdate) {
