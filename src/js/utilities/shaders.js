@@ -188,6 +188,9 @@ function createShader(gl, source, type) {
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
   
+  const debugStr = source.split('\n').map((line, i) => (i + 1).toString().padEnd(5, ' ')+line).join('\n');
+  console.log("== PROCESSED SHADER ==\n" + debugStr);
+
   if (gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
     return shader;
   }
@@ -195,8 +198,6 @@ function createShader(gl, source, type) {
   const message = gl.getShaderInfoLog(shader);
   gl.deleteShader(shader);
   
-  const debugStr = source.split('\n').map((line, i) => (i + 1).toString().padEnd(5, ' ')+line).join('\n');
-  console.error(debugStr);
   
   throw new Error(message);
 }

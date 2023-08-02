@@ -262,6 +262,7 @@ html, body {
 /* Console */
 #console-container {
   overflow: scroll;
+  max-height: 30%;
 }
 
 #console-output-container {

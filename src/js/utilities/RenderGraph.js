@@ -124,9 +124,10 @@ class RenderPass {
     if (this.#fbo !== null) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.#fbo);
       
-      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE) {
-        return;
-      }
+      // tf?
+      // if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE) {
+      //   return;
+      // }
       
       this.#colorOutput.forEach((name, i) => {
         const texture = this.#graph.getTexture(name);
@@ -153,6 +154,9 @@ class RenderPass {
       }
       
       const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+
+      console.error(status);
+
       if (status !== gl.FRAMEBUFFER_COMPLETE) {
         throw new Error(`incomplete framebuffer: status 0x${status.toString(16).toUpperCase()}`);
       }

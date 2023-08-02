@@ -224,12 +224,13 @@ vec4 sampleTextureAtlas(int textureIndex, vec2 uv) {
 
 //
 vec3 bsdf(IsectInfo isect, vec3 wi, vec3 wo) {
-  // return isect.matProps.albedo * INV_PI;
-  float shininess = 20.0;
-  vec3 sp = reflect(wi, isect.shadingNormal);
-  float cosT = dot(sp, wo);
+  return vec3(isect.uv, 0.3) * INV_PI;
+  return isect.matProps.albedo * INV_PI;
+  // float shininess = 20.0;
+  // vec3 sp = reflect(wi, isect.shadingNormal);
+  // float cosT = dot(sp, wo);
   
-  return isect.matProps.albedo * INV_PI + vec3(0.05) * (shininess+2.0)*INV_TWO_PI*pow(cosT, shininess);
+  // return isect.matProps.albedo * INV_PI + vec3(0.05) * (shininess+2.0)*INV_TWO_PI*pow(cosT, shininess);
 }
 
 vec3 sampleEquirectangularMap(sampler2D map, Ray ray) {
@@ -395,12 +396,34 @@ vec3 traceRay(Ray ray) {
 vec3 traceRay_CMP(Ray ray) {
   IsectInfo isect;
   
+  vec3 o = vec3(0);
+  vec3 c = vec3(1);
+  for (int i = 0; i < 3; i++) {
+    if (closestHit(ray, T_MIN, T_MAX, isect)) {
+      return isect.matProps.albedo;
+      vec3 wi = isect.tbn * uniformSampleHemisphere();
+      float cosTheta = CLAMP_DOT(wi, isect.geometricNormal);
+      float pdf = uniformHemispherePdf();
+      o += emittedRadiance(isect) * c;
+      c *= bsdf(isect, wi, -ray.direction) * cosTheta / pdf;
+      ray.origin = isect.point;
+      ray.direction = wi;
+    } else {
+      return vec3(0);
+      break;
+    }
+  }
+  return o;
+
+  // return vec3(1, 0, 0);
+
   vec3 radiance = vec3(0);
   vec3 throughput = vec3(1);
   
   for (int bounce = 0; bounce < MAX_BOUNCES; bounce++) {
     if (closestHit(ray, T_MIN, T_MAX, isect)) {
-        
+      // return isect.shadingNormal * 0.5 + 0.5;
+
       // Draw random direction "wi" from hemisphere
       vec3 wi = isect.tbn * uniformSampleHemisphere();
       
@@ -452,14 +475,14 @@ Ray generateRay() {
 void main() {
   seedRand();
   Ray ray = generateRay();
-  
+
 #ifdef CMP_INTEGRATOR
   vec3 color = CMP_PATTERN() ? INTEGRATOR(ray) : CMP_INTEGRATOR(ray);
 #else
   vec3 color = INTEGRATOR(ray);
 #endif
 
-fragment = vec4(color, 1);
+  fragment = vec4(color, 1);
   
 #ifdef KILL_NANS
   if (any(isnan(color))) {
