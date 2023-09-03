@@ -66,6 +66,7 @@ struct BlasDescriptor {
 struct IsectInfo {
   bool frontFace;
   float t;
+  vec3 bary;
   vec2 uv;
   vec3 point, geometricNormal, shadingNormal, shadingTangent, shadingBitangent;
   mat3 tbn;
@@ -110,6 +111,8 @@ uniform vec2 u_resolution;
 uniform float u_emissiveFactor;
 uniform float u_lensRadius;
 uniform float u_focalDistance;
+
+uniform int u_debugIndex;
 
 // inverse of traditional projection matrix used in rasterization
 uniform mat4 u_projectionMatrixInverse;
@@ -224,7 +227,7 @@ vec4 sampleTextureAtlas(int textureIndex, vec2 uv) {
 
 //
 vec3 bsdf(IsectInfo isect, vec3 wi, vec3 wo) {
-  return vec3(isect.uv, 0.3) * INV_PI;
+  // return vec3(isect.uv, 0.3) * INV_PI;
   return isect.matProps.albedo * INV_PI;
   // float shininess = 20.0;
   // vec3 sp = reflect(wi, isect.shadingNormal);
@@ -338,7 +341,9 @@ vec3 traceRay(Ray ray) {
       }
     }
 
-    return isect.matProps.albedo;
+    // return vec3(isect.matProps.albedo);
+    // return texture(u_textureAtlas, vec3(isect.uv, 0)).rgb;
+    // return isect.bary;
 
     radiance += uniformSampleOneLight(isect, ray) * throughput;
     
@@ -477,13 +482,47 @@ Ray generateRay() {
 void main() {
   seedRand();
   Ray ray = generateRay();
+  vec3 color;
+
+#ifndef DEBUG_ATLAS
 
 #ifdef CMP_INTEGRATOR
-  vec3 color = CMP_PATTERN() ? INTEGRATOR(ray) : CMP_INTEGRATOR(ray);
+  color = CMP_PATTERN() ? INTEGRATOR(ray) : CMP_INTEGRATOR(ray);
 #else
-  vec3 color = INTEGRATOR(ray);
-#endif
+  color = INTEGRATOR(ray);
+#endif // CMP_INTEGRATOR
 
+#else
+  // view textures in atlas using debug index
+  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec2 debugWindowRes = vec2(0.4);
+
+  if (all(greaterThan(uv, debugWindowRes))) {
+    vec2 previewUv = (uv - debugWindowRes) / (vec2(1) - debugWindowRes);
+
+    color = texture(
+      u_textureAtlas, 
+      vec3(previewUv, 0)
+    ).rgb;
+  } else if (all(lessThan(uv, debugWindowRes))) {
+    vec2 previewUv = uv/debugWindowRes;
+
+    int index = u_debugIndex % MAX_TEXTURES;
+
+    color = texture(
+      u_textureAtlas,
+      vec3(
+        (u_textureDescriptors[index].offset 
+        + u_textureDescriptors[index].size * previewUv)
+        / u_atlasResolution, 
+        0)).rgb;
+  } else {
+    // fill in with gray
+    color = vec3(0.2);
+  }
+#endif // DEBUG_ATLAS
+
+  // final color
   fragment = vec4(color, 1);
   
 #ifdef KILL_NANS

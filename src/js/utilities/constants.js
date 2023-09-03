@@ -42,4 +42,6 @@ export const SHADER_DEFINES =
 #define KILL_NANS
 #define INTEGRATOR traceRay
 //#define CMP_INTEGRATOR traceRay_CMP
-#define CMP_TILE_SIZE 64.0`;
+#define CMP_TILE_SIZE 64.0
+//#define DEBUG_ATLAS
+//#define CULL_FACE`;

@@ -1,5 +1,7 @@
+import { lowQualityId, enumerate } from "./util.js";
+
 export class ActiveNodeEditor {
-  static #DEFAULT_INSTANCE = new ActiveNodeEditor(document.querySelector('#active-node-container'));
+  static #DEFAULT_INSTANCE = new ActiveNodeEditor(document.querySelector('#node-1'));
   
   static editableProperties = Symbol('editableProperties');
   static createCustomDOM = Symbol('createCustomDOM');
@@ -10,6 +12,7 @@ export class ActiveNodeEditor {
   }
   
   #container;
+  #id = lowQualityId();
   
   constructor(container, updateCallback = () => {}) {
     this.#container = container;
@@ -38,6 +41,10 @@ export class ActiveNodeEditor {
     temp[path.at(-1)] = value;
   }
   
+  #genPropId(prop) {
+    return `ANE_${this.#id}_${prop.replaceAll('.', '_')}`;
+  }
+
   /**
    * <div class='ui-content-row'>
    *   <label for=...>...</label>
@@ -51,7 +58,7 @@ export class ActiveNodeEditor {
     
     if (node) {
       this.#container.classList.remove('empty');
-      
+
       const props = node.constructor[ActiveNodeEditor.editableProperties].sort((a, b) => {
         const {mutable: mutableA, bubble: bubbleA = false} = a;
         const {mutable: mutableB, bubble: bubbleB = false} = b;
@@ -73,8 +80,13 @@ export class ActiveNodeEditor {
           
         if (type === 'object') {
           if (ActiveNodeEditor.createCustomDOM in value) {
-            for (const row of value[ActiveNodeEditor.createCustomDOM](mutable, displayName, this.updateCallback)) {
+            for (const [row, index] of enumerate(value[ActiveNodeEditor.createCustomDOM](mutable, displayName, this.updateCallback))) {
               this.#container.appendChild(row);
+
+              row.querySelector('input')?.setAttribute(
+                'id', 
+                this.#genPropId(prop)+`_p${index}`,
+              );
             }
           }
         } else {
@@ -83,6 +95,8 @@ export class ActiveNodeEditor {
           
           const label = document.createElement('label');
           const input = document.createElement('input');
+
+          input.setAttribute('id', this.#genPropId(prop));
           
           label.textContent = displayName;
           if (mono) {

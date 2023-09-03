@@ -28,6 +28,8 @@ bool intersectsTriangle(ShadingTriangle tri, BlasDescriptor descriptor, Ray obje
   
   if (t < tMax && t > tMin) {
     float w = 1.0 - u - v;
+
+    isect.bary = vec3(u, v, w);
     
     // clamp to avoid color bleeding at texture boundaries
     vec2 uv = clamp(w * tri.t0 + u * tri.t1 + v * tri.t2, vec2(0), vec2(0.99));
@@ -37,7 +39,6 @@ bool intersectsTriangle(ShadingTriangle tri, BlasDescriptor descriptor, Ray obje
     
     setNormal(objectRay, shadingNormal, geometricNormal, isect);
 
-// #define CULL_FACE
 #ifdef CULL_FACE
     if (!isect.frontFace) {
       return false;

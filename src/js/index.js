@@ -26,6 +26,7 @@ class HydraView extends EventTarget {
   
   nodeTree = this.getElement('#tree-viewer');
   nodeEditor = ActiveNodeEditor.getDefault();
+  liveSettings = new ActiveNodeEditor(document.querySelector('#node-2'));
   
   canvas = this.getElement('#hydra-canvas');
   pause = this.getElement('#pause');
@@ -80,7 +81,7 @@ class HydraView extends EventTarget {
 // controller implements application-specific meaning of interface behavior
 class HydraController extends EventTarget {
   static Mode = createEnum('TRACE', 'RASTER', 'PLUGIN', 'NONE');
-  
+
   keyMap = {};
   mode = HydraController.Mode.NONE;
   paused = false;
@@ -95,16 +96,14 @@ class HydraController extends EventTarget {
     const view = this.view = new HydraView();
     const model = this.model = new HydraModel(view.gl);
     
+    this.view.liveSettings.activeNode = model;
+
     view.defines.value = SHADER_DEFINES;
     
     // choose scene interface
     let keyBindingsDown = null;
     let keyBindingsUp = null;
-    
-    document.addEventListener('keydown', ({key}) => {
-      this.keyMap[key] = true;
-    });
-    
+
     document.addEventListener('keyup', ({key}) => {
       this.keyMap[key] = false;
     });
@@ -170,6 +169,13 @@ class HydraController extends EventTarget {
               case 't':
                 view.keyBindings.classList.remove('hidden');
                 break;
+              // case 'i':
+              //   if (this.mode === HydraController.Mode.TRACE) { 
+              //     DisplayConsole.getDefault().log(`Updating debug index (${model.debugIndex})`);
+              //     model.triggerDebug();
+              //     this.reset();
+              //   }
+              //   break;
             }
           }).bind(this);
           
@@ -204,6 +210,12 @@ class HydraController extends EventTarget {
               });
             }
           };
+
+          view.liveSettings.updateCallback = () => {
+            if (this.mode === HydraController.Mode.TRACE) {
+              this.reset();
+            }
+          }
           
           const width = parseInt(view.width.value);
           const height = parseInt(view.height.value);

@@ -9,6 +9,7 @@ import { BinaryBVH } from './accel/BVHNode.js';
 import { HdrLoader, computeHdrSamplingDistributions } from './loading/HdrLoader.js';
 import { OrbitalCamera } from './utilities/OrbitCamera.js';
 import { Matrix4 } from './math/Matrix4.js';
+import { ActiveNodeEditor } from './utilities/ActiveNodeEditor.js';
 import {
   CAMERA_VERTICES,
   CAMERA_INDICES,
@@ -25,6 +26,10 @@ const SSAA_LEVEL = Math.pow(2, 2);
 const SIZEOF_RGBA32F_TEXEL = 4 * Float32Array.BYTES_PER_ELEMENT;
 
 export class HydraModel extends EventTarget {
+  static [ActiveNodeEditor.editableProperties] = [
+    {prop: 'debugIndex', mutable: true, triggerUpdate: true, mono: true},
+  ];
+
   static REQUIRED_WEBGL_EXTENSIONS = [
     'WEBGL_debug_renderer_info',
     'OES_texture_float_linear',
@@ -76,7 +81,8 @@ export class HydraModel extends EventTarget {
   orbitalCamera = new OrbitalCamera(.01, .95, 50);
   focusedNode = null;
   focusedNodes = null;
-  
+  debugIndex = 0;
+
   constructor(gl) {
     super();
     
@@ -100,6 +106,10 @@ export class HydraModel extends EventTarget {
 `Vendor: ${this.gl.getParameter(debugExt.UNMASKED_VENDOR_WEBGL)}
 Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     );
+  }
+
+  triggerDebug() {
+    this.debugIndex++;
   }
   
   async reloadShaders() {
@@ -657,6 +667,8 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       main.uniforms.set('u_projectionMatrixInverse', this.currentCamera.projectionMatrix.inverse);
       main.uniforms.set('u_cameraMatrix', this.currentCamera.worldMatrix);
       
+      main.uniforms.set('u_debugIndex', this.debugIndex);
+
       json.dataTextures.descriptors.forEach(({name, width, height}) => {
         main.uniforms.set(`u_${name}.sampler`, textureBindings[name]);
         main.uniforms.set(`u_${name}.size`, [width, height]);
