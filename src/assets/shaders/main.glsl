@@ -337,7 +337,9 @@ vec3 traceRay(Ray ray) {
         break;
       }
     }
-    
+
+    return isect.matProps.albedo;
+
     radiance += uniformSampleOneLight(isect, ray) * throughput;
     
     // Draw random direction "wi" from hemisphere

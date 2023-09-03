@@ -11,6 +11,11 @@
   --border-color: #808080;
 }
 
+/* Chrome? */
+::-webkit-scrollbar{
+  display: none;
+}
+
 ::selection {
   background: var(--highlight-color);
   color: var(--bg-color);

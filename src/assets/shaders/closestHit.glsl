@@ -55,7 +55,7 @@ bool intersectsTriangle(ShadingTriangle tri, BlasDescriptor descriptor, Ray obje
     
     vec4 baseColor = sampleTextureAtlas(mat.baseColorTexture, uv);
     vec4 metallicRoughness = sampleTextureAtlas(mat.metallicRoughnessTexture, uv);
-    
+
     matProps.albedo = mat.baseColorFactor.rgb * baseColor.rgb;
     matProps.alpha = mat.baseColorFactor.a * baseColor.a;
     matProps.metallicFactor = metallicRoughness.r;
