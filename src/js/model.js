@@ -1,6 +1,6 @@
 import { SourceCache, ShaderLib } from './utilities/shaders.js';
 import { DisplayConsole } from './utilities/Console.js';
-import { EventTarget, UboBuilder, bufferToImage, canvasToBlob } from './utilities/util.js';
+import { EventTarget, UboBuilder, bufferToImage, canvasToBlob, loadImage } from './utilities/util.js';
 import { SceneGraphNode } from './utilities/SceneGraphNode.js';
 import { FrameGraph } from './utilities/RenderGraph.js';
 import { decodeHydra } from './loading/hydra.js';
@@ -27,7 +27,7 @@ const SIZEOF_RGBA32F_TEXEL = 4 * Float32Array.BYTES_PER_ELEMENT;
 
 export class HydraModel extends EventTarget {
   static [ActiveNodeEditor.editableProperties] = [
-    {prop: 'debugIndex', mutable: true, triggerUpdate: true, mono: true},
+    {prop: 'debugIndex', displayName: 'Debug magic number', mutable: true, triggerUpdate: true},
   ];
 
   static REQUIRED_WEBGL_EXTENSIONS = [
@@ -58,6 +58,7 @@ export class HydraModel extends EventTarget {
     'icons.glsl',
     'cameraFrag.glsl',
     'gradient.glsl',
+    'tex.glsl',
   ];
   
   static PROGRAM_INFO = {
@@ -235,11 +236,33 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     });
     
+    const devImage = await loadImage('./assets/images/hydra_dev_placeholder.png');
+
+    this.fg.createTexture('dev-image', FrameGraph.Tex.TEXTURE_2D, (gl, tex) => {
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.SRGB8_ALPHA8,
+        devImage.width,
+        devImage.height,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        devImage,
+      );
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR );
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    });
+
     await this.uploadTlas();
     await this.#initializeEnvMap(environmentMap);
     
     // data textures
-    this.fg.createVertexArray('scene-geometry', (gl, vertexArray) => {
+    this.fg.createVertexArray('scene-geometry', async (gl, vertexArray) => {
       const dataTexBuffer = asset.getBufferView(asset.json.dataTextures.bufferView);
   
       this.fg.createBuffer('unpack-buffer', (gl, buf) => {
@@ -262,14 +285,22 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
           gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, offset);
         });
-        
+
+        console.log(name, dataTexBuffer.slice(offset, offset+width*height*numComponents*4));
+
         switch (name) {
           case 'FACE':
             gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, dataTexBuffer.slice(offset), gl.STATIC_DRAW);
             break;
+          case 'MATERIAL':
+            var location = gBufferShader.attribs.get('a_MATERIAL');
+            gl.vertexAttribIPointer(location, numComponents, type, 0, offset);
+            gl.enableVertexAttribArray(location);
+            break;
           case 'VERTEX':
           case 'NORMAL':
-            const location = gBufferShader.attribs.get(`a_${name}`);
+          case 'TEXCOORD':
+            var location = gBufferShader.attribs.get(`a_${name}`);
             gl.vertexAttribPointer(location, numComponents, type, false, 0, offset);
             gl.enableVertexAttribArray(location);
             break;
@@ -437,10 +468,16 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       const gBufferShader = this.shaderLib.getShader('g-buffer');
       gl.bindVertexArray(vertexArrays.get('scene-geometry'));
       
+      gBufferShader.uniforms.set('u_textureAtlas', textureBindings['texture-atlas']);
+      gBufferShader.uniforms.set('u_atlasResolution', [json.atlas.size.width, json.atlas.size.height]);
+    
+
       this.sceneGraph.nodes.filter(node => node.type === 'MeshNode').forEach(node => {
         const descriptor = json.meshDescriptors.find(d => d.meshIndex === node.mesh.index);
-        const color = (this.focusedNode === node || this.focusedNodes?.includes(node)) ? EDITOR_COLOR_SCHEME.selection : EDITOR_COLOR_SCHEME.mesh;
+        const color = (this.focusedNode === node || this.focusedNodes?.includes(node)) ? EDITOR_COLOR_SCHEME.selection : EDITOR_COLOR_SCHEME.white;
         
+        
+        gBufferShader.uniforms.set('u_debugIndex', this.debugIndex);
         gBufferShader.uniforms.set('u_projectionMatrix', this.orbitalCamera.projectionMatrix);
         gBufferShader.uniforms.set('u_viewMatrix', this.orbitalCamera.viewMatrix);
         gBufferShader.uniforms.set('u_worldMatrix', node.worldMatrix);
@@ -452,6 +489,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     });
     
     // specify pass outputs
+    gBufferPass.addTextureInput('texture-atlas');
     gBufferPass.addColorOutput('g-color0');
     gBufferPass.addColorOutput('g-normals');
     gBufferPass.setDepthOutput('g-depth');
@@ -655,6 +693,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       gl.blendFunc(gl.ONE, gl.ONE);
       
       main.uniforms.set('u_currentSample', this.sampleCount);
+      main.uniforms.set('u_devImage', textureBindings['dev-image']);
       main.uniforms.set('u_textureAtlas', textureBindings['texture-atlas']);
       main.uniforms.set('u_envMap', textureBindings['hdr']);
       main.uniforms.set('u_marginalDistribution', textureBindings['hdr-marg-dist']);
@@ -689,6 +728,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       this.sampleCount++;
     });
     
+    rtxPass.addTextureInput('dev-image');
     rtxPass.addTextureInput('texture-atlas');
     rtxPass.addTextureInput('bvh');
     rtxPass.addTextureInput('hdr');
@@ -791,7 +831,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     ]) {
       this.fg.createBuffer(name, (gl, buf) => {
         gl.bindBuffer(gl.UNIFORM_BUFFER, buf);
-        
+
         if (bufferView) {
           const data = this.asset.getBufferView(bufferView);
           gl.bufferData(gl.UNIFORM_BUFFER, data, gl.STATIC_DRAW);
@@ -827,6 +867,8 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     // build top-level hierarchy
     const primitives = meshes.map((mesh, i) => new MeshBlas(mesh, i));
     
+    console.log('[INDEX]', this.sceneGraph);
+
     displayConsole.time();
     const tlas = new BinaryBVH(primitives, BinaryBVH.SplitMethod.SAH);
     displayConsole.timeEnd('TLAS Build', 'cpu');

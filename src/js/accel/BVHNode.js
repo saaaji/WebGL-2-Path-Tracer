@@ -24,6 +24,8 @@ export class BinaryBVH {
   
   // parameters prepended with underscore should only be passed internally during construction
   constructor(primitives, splitMethod = BinaryBVH.SplitMethod.SAH, _parent = null, _deadEnd = true) {
+    // console.log('[BVH]', primitives);
+    
     this.parent = _parent;
     this.boundingBox = new AABB();
     this.primitiveCount = primitives.length;

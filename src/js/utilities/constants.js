@@ -1,3 +1,10 @@
+import {
+  NUM_BLAS,
+  NUM_LIGHTS,
+  NUM_MATERIALS,
+  NUM_TEXTURES,
+} from '../loading/hydra.js';
+
 // inline camera geometry
 export const CAMERA_VERTICES = [
   -1, -1, -1,
@@ -31,8 +38,10 @@ export const FOCAL_DIST_OUTLINE_VERTICES = [
 export const EDITOR_COLOR_SCHEME = window.hydra_EDITOR_COLOR_SCHEME = {
   camera: [0.15, 0.15, 0.15],
   mesh: [0.8, 0.8, 0.8],
-  selection: [1, 0.6, 0],
+  // selection: [1, 0.6, 0],
+  selection: [0, 0.6, 1],
   focalPlane: [0, 0.6, 1],
+  white: [1, 1, 1],
 };
 
 export const SHADER_DEFINES =
@@ -44,4 +53,11 @@ export const SHADER_DEFINES =
 //#define CMP_INTEGRATOR traceRay_CMP
 #define CMP_TILE_SIZE 64.0
 //#define DEBUG_ATLAS
-//#define CULL_FACE`;
+//#define UV_CHECKERBOARD
+//#define CULL_FACE
+
+// BUFFER SIZING INFO (DO NOT TOUCH)
+#define MAX_TEXTURES ${NUM_TEXTURES}
+#define MAX_MATERIALS ${NUM_MATERIALS}
+#define MAX_LIGHTS ${NUM_LIGHTS}
+#define MAX_BLAS ${NUM_BLAS}`;

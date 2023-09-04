@@ -129,6 +129,7 @@ uniform DataTextureF u_accelStruct;
 // textures
 uniform vec2 u_atlasResolution;
 uniform sampler2DArray u_textureAtlas;
+uniform sampler2D u_devImage;
 
 // environment map
 uniform bool u_useEnvMap;
@@ -136,12 +137,6 @@ uniform vec2 u_hdrRes;
 uniform sampler2D u_envMap;
 uniform sampler2D u_marginalDistribution;
 uniform sampler2D u_conditionalDistribution;
-
-// buffers
-#define MAX_TEXTURES 32
-#define MAX_MATERIALS 32
-#define MAX_LIGHTS 32
-#define MAX_BLAS 32
 
 layout(std140) uniform TextureDescriptors {
   TextureDescriptor u_textureDescriptors[MAX_TEXTURES];
@@ -210,15 +205,7 @@ Triangle getTriangle(int id) {
   return Triangle(v0, v1, v2, id);
 }
 
-vec4 sampleTextureAtlas(int textureIndex, vec2 uv) {
-  TextureDescriptor descriptor = u_textureDescriptors[textureIndex];
-  
-  vec2 offsetUv = vec2(descriptor.offset + descriptor.size * uv) / u_atlasResolution;
-  vec3 texCoord = vec3(offsetUv, descriptor.section);
-  
-  return texture(u_textureAtlas, texCoord);
-}
-
+#pragma HYDRA include<tex.glsl>
 #pragma HYDRA include<random.glsl>
 #pragma HYDRA include<intersections.glsl>
 #pragma HYDRA include<closestHit.glsl>
@@ -341,9 +328,13 @@ vec3 traceRay(Ray ray) {
       }
     }
 
-    // return vec3(isect.matProps.albedo);
+    // return isect.matProps.albedo;
+    // return isect.point;
+    // return 0.5+0.5*isect.shadingNormal;
+    // return vec3(isect.bary);
     // return texture(u_textureAtlas, vec3(isect.uv, 0)).rgb;
     // return isect.bary;
+    return vec3(isect.uv, 0);
 
     radiance += uniformSampleOneLight(isect, ray) * throughput;
     
@@ -400,62 +391,6 @@ vec3 traceRay(Ray ray) {
   return radiance;
 }
 
-vec3 traceRay_CMP(Ray ray) {
-  IsectInfo isect;
-  
-  vec3 o = vec3(0);
-  vec3 c = vec3(1);
-  for (int i = 0; i < 3; i++) {
-    if (closestHit(ray, T_MIN, T_MAX, isect)) {
-      return isect.matProps.albedo;
-      vec3 wi = isect.tbn * uniformSampleHemisphere();
-      float cosTheta = CLAMP_DOT(wi, isect.geometricNormal);
-      float pdf = uniformHemispherePdf();
-      o += emittedRadiance(isect) * c;
-      c *= bsdf(isect, wi, -ray.direction) * cosTheta / pdf;
-      ray.origin = isect.point;
-      ray.direction = wi;
-    } else {
-      return vec3(0);
-      break;
-    }
-  }
-  return o;
-
-  // return vec3(1, 0, 0);
-
-  vec3 radiance = vec3(0);
-  vec3 throughput = vec3(1);
-  
-  for (int bounce = 0; bounce < MAX_BOUNCES; bounce++) {
-    if (closestHit(ray, T_MIN, T_MAX, isect)) {
-      // return isect.shadingNormal * 0.5 + 0.5;
-
-      // Draw random direction "wi" from hemisphere
-      vec3 wi = isect.tbn * uniformSampleHemisphere();
-      
-      // Evaluate cosine correction factor for incoming light
-      float cosTheta = CLAMP_DOT(wi, isect.shadingNormal);
-      
-      // Update throughput
-      float pdf = uniformHemispherePdf();
-      radiance += emittedRadiance(isect) * throughput;
-      throughput *= bsdf(isect, wi, -ray.direction) * cosTheta / pdf;
-      
-      // Continue path
-      ray.origin = isect.point;
-      ray.direction = wi;
-    } else {
-      if (u_useEnvMap) {
-        radiance += sampleEquirectangularMap(u_envMap, ray) * throughput;
-      }
-      break;
-    }
-  }
-  
-  return radiance;
-}
-
 Ray generateRay() {
 #ifdef MSAA
   vec2 uv = (gl_FragCoord.xy + vec2(rand(), rand())) / u_resolution;
@@ -477,10 +412,46 @@ Ray generateRay() {
   return ray;
 }
 
+const int N_COL = 100;
+
+vec3 traceRay_CMP(Ray ray, vec3[N_COL] idm) {
+  IsectInfo isect;
+  
+  if (closestHit(ray, T_MIN, T_MAX, isect)) {
+    if (isect.tri.id == 0) {
+      // return isect.bary;
+      // return vec3(0.875, 0.25, 0);
+      // vec4 _t = texelFetch(u_TEXCOORD.sampler, ivec2(1, 0), 0);
+      vec4 _t = INDEX(u_TEXCOORD, 0);
+      return vec3(_t.xy, 0);
+      // return vec3(isect.uv, 0);
+    } else {
+      return vec3(0.2);
+      // return vec3(isect.uv, 0);
+      // return vec3(0.2);
+    }
+
+    ivec4 face = INDEX(u_FACE, isect.tri.id);
+
+
+
+    vec2 t0 = INDEX(u_TEXCOORD, face.z).xy;
+    // return vec3(t0, 0);
+    return vec3(float(isect.tri.id)/100.0);
+
+    // return idm[face.z % idm.length()];
+
+    // return vec3(isect.uv, 0);
+  } else {
+    return vec3(0);
+  }
+}
+
 #define CMP_PATTERN() (mod(gl_FragCoord.x, CMP_TILE_SIZE) > CMP_TILE_SIZE / 2.0 == mod(gl_FragCoord.y, CMP_TILE_SIZE) > CMP_TILE_SIZE / 2.0)
 
 void main() {
   seedRand();
+  g_rngState = 123234234u;
   Ray ray = generateRay();
   vec3 color;
 
@@ -489,7 +460,13 @@ void main() {
 #ifdef CMP_INTEGRATOR
   color = CMP_PATTERN() ? INTEGRATOR(ray) : CMP_INTEGRATOR(ray);
 #else
-  color = INTEGRATOR(ray);
+  // color = INTEGRATOR(ray);
+
+  vec3[N_COL] idm;
+  for (int i = 0; i < idm.length(); i++) {
+    idm[i] = vec3(rand(), rand(), rand());
+  }
+  color = traceRay_CMP(ray, idm);
 #endif // CMP_INTEGRATOR
 
 #else
@@ -506,23 +483,24 @@ void main() {
     ).rgb;
   } else if (all(lessThan(uv, debugWindowRes))) {
     vec2 previewUv = uv/debugWindowRes;
-
     int index = u_debugIndex % MAX_TEXTURES;
+    TextureDescriptor tex = u_textureDescriptors[index];
 
-    color = texture(
-      u_textureAtlas,
-      vec3(
-        (u_textureDescriptors[index].offset 
-        + u_textureDescriptors[index].size * previewUv)
-        / u_atlasResolution, 
-        0)).rgb;
+    color = texture( u_textureAtlas, vec3(
+      (tex.offset + tex.size * previewUv) / u_atlasResolution, 
+      0
+    )).rgb;
   } else {
-    // fill in with gray
-    color = vec3(0.2);
+    color = texture(
+      u_devImage, 
+      vec2(uv.x, 1.0-uv.y) * 4.0
+    ).rgb;
   }
 #endif // DEBUG_ATLAS
 
+
   // final color
+  color = texture(u_TEXCOORD.sampler, gl_FragCoord.xy/u_resolution).xyz;
   fragment = vec4(color, 1);
   
 #ifdef KILL_NANS

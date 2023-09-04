@@ -272,6 +272,8 @@ export class MeshNode extends SceneGraphNode {
   // construct from JSON-friendly descriptor
   constructor({
     mesh: {
+      // 9/3/23 ss - something's wrong
+      // renderable = true,
       renderable = false,
       index,
       boundingBox: {min, max},
@@ -281,6 +283,7 @@ export class MeshNode extends SceneGraphNode {
     super(descriptor);
     
     this.mesh.renderable = renderable;
+    // this.mesh.renderable = true;
     this.mesh.index = index;
     this.mesh.boundingBox = new AABB(...min, ...max);
   }

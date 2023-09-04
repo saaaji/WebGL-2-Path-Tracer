@@ -87,7 +87,8 @@ class HydraController extends EventTarget {
   paused = false;
   lastFrameId = -1;
   snapshotSampleThreshold = 0;
-  
+  mouseDown = false;
+
   frameGraph;
   
   constructor() {
@@ -133,7 +134,9 @@ class HydraController extends EventTarget {
         case 'hydra':
           this.mode = HydraController.Mode.RASTER;
           
-          keyBindingsDown = (function({key}) { 
+          keyBindingsDown = (function({key}) {
+            this.keyMap[key] = true;
+
             switch (key) {
               case 'p':
                 this.togglePaused();
@@ -452,12 +455,16 @@ class HydraController extends EventTarget {
     
     // updating key map
     view.defines.addEventListener('keydown', event => {
-      event.stopPropagation();
+      // event.stopPropagation();
     });
     
     // updating editor camera
+    view.canvas.addEventListener('mousedown', () => this.mouseDown = true);
+    view.canvas.addEventListener('mouseleave', () => this.mouseDown = false);
+    view.canvas.addEventListener('mouseup', () => this.mouseDown = false);
+
     view.canvas.addEventListener('mousemove', ({movementX: dx, movementY: dy, offsetX: x, offsetY: y}) => {
-      if (!this.paused && this.keyMap['g'] && this.mode === HydraController.Mode.RASTER) {
+      if (!this.paused && (this.keyMap['g'] || this.mouseDown) && this.mode === HydraController.Mode.RASTER) {
         model.orbitalCamera.pan(dx, dy);
       }
     });

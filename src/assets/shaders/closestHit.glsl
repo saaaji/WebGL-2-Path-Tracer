@@ -31,8 +31,19 @@ bool intersectsTriangle(ShadingTriangle tri, BlasDescriptor descriptor, Ray obje
 
     isect.bary = vec3(u, v, w);
     
+    // ivec4 _i = INDEX(u_FACE, tri.id);
+    
+    // vec2 _t0 = texelFetch(
+    //   u_TEXCOORD.sampler, ivec2(
+    //     (_i.x) % 49, 
+    //     (_i.x) / 49), 
+    //   0
+    // ).xy;
+
     // clamp to avoid color bleeding at texture boundaries
-    vec2 uv = clamp(w * tri.t0 + u * tri.t1 + v * tri.t2, vec2(0), vec2(0.99));
+    vec2 uv = w * tri.t0 + u * tri.t1 + v * tri.t2;
+
+    // uv = mod(uv, vec2(1));
     
     vec3 shadingNormal = normalize(w * tri.n0 + u * tri.n1 + v * tri.n2);
     vec3 geometricNormal = normalize(cross(e1, e2));
@@ -56,12 +67,17 @@ bool intersectsTriangle(ShadingTriangle tri, BlasDescriptor descriptor, Ray obje
     
     vec4 baseColor = sampleTextureAtlas(mat.baseColorTexture, uv);
     vec4 metallicRoughness = sampleTextureAtlas(mat.metallicRoughnessTexture, uv);
-
-    matProps.albedo = mat.baseColorFactor.rgb * baseColor.rgb;
+    
     matProps.alpha = mat.baseColorFactor.a * baseColor.a;
     matProps.metallicFactor = metallicRoughness.r;
     matProps.roughnessFactor = metallicRoughness.g;
     matProps.emissiveFactor = mat.emissiveFactor;
+
+#ifndef UV_CHECKERBOARD
+    matProps.albedo = mat.baseColorFactor.rgb * baseColor.rgb;
+#else
+    matProps.albedo = procTexCheckerboard(uv).rgb;
+#endif
     
     /**
      * matrix equation for geometric tangent and bitangent:

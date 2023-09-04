@@ -87,6 +87,8 @@ export class Pipeline {
     this.buffers.forEach(name => {
       const index = gl.getUniformBlockIndex(program, name);
       this.#bufferIndices.set(name, index);
+
+      console.log(name, gl.getActiveUniformBlockParameter(program, index, gl.UNIFORM_BLOCK_DATA_SIZE));
     });
   }
   

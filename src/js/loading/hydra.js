@@ -15,7 +15,7 @@ const HEADER_SIZE = 8;
 const VERSION = 10;
 const TEXTURE_ATLAS_SIZE = 2048;
 
-export const NUM_LIGHTS = 33;
+export const NUM_LIGHTS = 32;
 export const NUM_MATERIALS = 32;
 export const NUM_TEXTURES = 32;
 export const NUM_BLAS = 32;
@@ -79,10 +79,10 @@ export async function encodeHydra(fileList) {
     {name: 'TEXCOORD', dataType: DataType.Float32,  numComponents: 2, data: vertexAttribs.texCoord0},
     {name: 'MATERIAL', dataType: DataType.Int32,    numComponents: 1, data: vertexAttribs.materials},
   ], state);
-  
+
   const textureDescriptors = [];
   const atlas = await createTextureAtlas(images, textureDescriptors, state);
-  
+
   const uniformBuffers = createUniformBuffers([
     {
       name: 'Materials',
@@ -113,11 +113,11 @@ export async function encodeHydra(fileList) {
     },
     {
       name: 'Lights',
-      capacity: NUM_LIGHTS * SIZEOF_LIGHT,
+      capacity: (NUM_LIGHTS + 1) * SIZEOF_LIGHT,
       populate: builder => {
-        builder.pushInts(lights.length);
+        builder.pushInts(Math.min(lights.length, NUM_LIGHTS));
         
-        for (const {id, blasIndex} of lights) {
+        for (const {id, blasIndex} of lights.slice(0, NUM_LIGHTS)) {
           builder.beginStruct();
           builder.pushInts(id);
           builder.pushInts(blasIndex);
@@ -183,6 +183,8 @@ function createDataTextureBuffer(dataTextureInfo, state) {
     
     currentOffset += buffer.byteLength;
   }
+
+  console.log('[hyd]', descriptors);
   
   return {
     descriptors,
