@@ -155,8 +155,6 @@ class RenderPass {
       
       const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
 
-      console.error(status);
-
       if (status !== gl.FRAMEBUFFER_COMPLETE) {
         throw new Error(`incomplete framebuffer: status 0x${status.toString(16).toUpperCase()}`);
       }

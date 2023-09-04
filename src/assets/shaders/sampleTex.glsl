@@ -17,8 +17,7 @@ void main() {
   vec3 averageRadiance = texture(u_outputImage, v_texCoord).rgb * u_sampleCountInv;
   
   // LDR [0, 1]
-  vec3 col = averageRadiance.xyz;
-  // vec3 col = clamp(pow(averageRadiance, vec3(1.0 / GAMMA)), 0.0, 1.0);
+  vec3 col = clamp(pow(averageRadiance, vec3(1.0 / GAMMA)), 0.0, 1.0);
   fragment = vec4(col, 1);
   
   if (any(isnan(fragment))) {

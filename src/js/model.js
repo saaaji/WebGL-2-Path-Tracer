@@ -16,6 +16,7 @@ import {
   FOCAL_DIST_PLANE_VERTICES,
   FOCAL_DIST_OUTLINE_VERTICES,
   EDITOR_COLOR_SCHEME,
+  TYPE_TO_SIZE,
 } from './utilities/constants.js';
 
 // preview config
@@ -113,7 +114,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     this.debugIndex++;
   }
   
-  async reloadShaders() {
+  async reloadShaders(logShaders = false) {
     // fetch/reload shader fragments
     await Promise.all(
       this.constructor.SHADER_SRC.map(file => this.sourceCache.registerModule(file)),
@@ -134,12 +135,13 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       this.shaderLib.addShader(name, this.gl, {
         vertexSource,
         fragmentSource,
-      });
+      }, logShaders);
     }
   }
   
   // load necessary state from asset file and reload shaders
   async updateState({
+    logShaders,
     file,
     environmentMap,
     renderConfig: {
@@ -154,7 +156,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     this.dimensions = [width, height];
     
     // update shaders
-    await this.reloadShaders();
+    await this.reloadShaders(logShaders);
     
     // initialize GPU resources
     const gl = this.gl;
@@ -283,10 +285,23 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-          gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, offset);
-        });
+          
+          /**
+           * fix for apparent alignment issue (when offset % 8 != 0)
+           * maybe abstain from using PIXEL_UNPACK_BUFFER
+           */
+          if (name !== 'TEXCOORD') {
+            gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, offset);
+          } else {
+            const uvData = new Float32Array(
+              dataTexBuffer.slice(offset, offset + numComponents * width * height * TYPE_TO_SIZE[type])
+            );
 
-        console.log(name, dataTexBuffer.slice(offset, offset+width*height*numComponents*4));
+            gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
+            gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, uvData);
+            gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, this.fg.getBuffer('unpack-buffer'));
+          }
+        });
 
         switch (name) {
           case 'FACE':
@@ -315,8 +330,6 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     const aspectRatio = width / height;
     const previewWidth = PREVIEW_DEFAULT_WIDTH * SSAA_LEVEL;
     const previewHeight = Math.floor(PREVIEW_DEFAULT_WIDTH / aspectRatio) * SSAA_LEVEL;
-    
-    console.log(previewWidth, previewHeight, previewWidth / previewHeight);
     
     this.fg.createTexture('g-color0', FrameGraph.Tex.TEXTURE_2D, (gl, texture) => {
       gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -866,8 +879,6 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     
     // build top-level hierarchy
     const primitives = meshes.map((mesh, i) => new MeshBlas(mesh, i));
-    
-    console.log('[INDEX]', this.sceneGraph);
 
     displayConsole.time();
     const tlas = new BinaryBVH(primitives, BinaryBVH.SplitMethod.SAH);

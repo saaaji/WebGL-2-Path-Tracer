@@ -1,3 +1,6 @@
+#ifndef TEX
+#define TEX
+
 vec4 procTexCheckerboard(vec2 uv) {
   float freq = 10.0;
   uv *= freq;
@@ -20,3 +23,5 @@ vec4 sampleTextureAtlas(int textureIndex, vec2 uv) {
   
   return texture(u_textureAtlas, texCoord);
 }
+
+#endif

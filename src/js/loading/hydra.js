@@ -183,8 +183,6 @@ function createDataTextureBuffer(dataTextureInfo, state) {
     
     currentOffset += buffer.byteLength;
   }
-
-  console.log('[hyd]', descriptors);
   
   return {
     descriptors,

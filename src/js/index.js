@@ -22,6 +22,7 @@ class HydraView extends EventTarget {
   emissiveFactor = this.getElement('#emissive-factor');
   threshold = this.getElement('#threshold');
   defines = this.getElement('#defines');
+  logShaders = this.getElement('#log-shaders');
   render = this.getElement('#render');
   
   nodeTree = this.getElement('#tree-viewer');
@@ -230,6 +231,7 @@ class HydraController extends EventTarget {
           this.snapshotSampleFactor = parseInt(view.threshold.value);
           
           model.updateState({
+            logShaders: view.logShaders.checked,
             file,
             environmentMap,
             renderConfig: {

@@ -328,14 +328,6 @@ vec3 traceRay(Ray ray) {
       }
     }
 
-    // return isect.matProps.albedo;
-    // return isect.point;
-    // return 0.5+0.5*isect.shadingNormal;
-    // return vec3(isect.bary);
-    // return texture(u_textureAtlas, vec3(isect.uv, 0)).rgb;
-    // return isect.bary;
-    return vec3(isect.uv, 0);
-
     radiance += uniformSampleOneLight(isect, ray) * throughput;
     
     // Draw random direction "wi" from hemisphere
@@ -412,63 +404,16 @@ Ray generateRay() {
   return ray;
 }
 
-const int N_COL = 100;
-
-vec3 traceRay_CMP(Ray ray, vec3[N_COL] idm) {
-  IsectInfo isect;
-  
-  if (closestHit(ray, T_MIN, T_MAX, isect)) {
-    if (isect.tri.id == 0) {
-      // return isect.bary;
-      // return vec3(0.875, 0.25, 0);
-      // vec4 _t = texelFetch(u_TEXCOORD.sampler, ivec2(1, 0), 0);
-      vec4 _t = INDEX(u_TEXCOORD, 0);
-      return vec3(_t.xy, 0);
-      // return vec3(isect.uv, 0);
-    } else {
-      return vec3(0.2);
-      // return vec3(isect.uv, 0);
-      // return vec3(0.2);
-    }
-
-    ivec4 face = INDEX(u_FACE, isect.tri.id);
-
-
-
-    vec2 t0 = INDEX(u_TEXCOORD, face.z).xy;
-    // return vec3(t0, 0);
-    return vec3(float(isect.tri.id)/100.0);
-
-    // return idm[face.z % idm.length()];
-
-    // return vec3(isect.uv, 0);
-  } else {
-    return vec3(0);
-  }
-}
-
-#define CMP_PATTERN() (mod(gl_FragCoord.x, CMP_TILE_SIZE) > CMP_TILE_SIZE / 2.0 == mod(gl_FragCoord.y, CMP_TILE_SIZE) > CMP_TILE_SIZE / 2.0)
-
 void main() {
+  /**
+  * RAY GENERATION
+  */
   seedRand();
-  g_rngState = 123234234u;
   Ray ray = generateRay();
   vec3 color;
 
 #ifndef DEBUG_ATLAS
-
-#ifdef CMP_INTEGRATOR
-  color = CMP_PATTERN() ? INTEGRATOR(ray) : CMP_INTEGRATOR(ray);
-#else
-  // color = INTEGRATOR(ray);
-
-  vec3[N_COL] idm;
-  for (int i = 0; i < idm.length(); i++) {
-    idm[i] = vec3(rand(), rand(), rand());
-  }
-  color = traceRay_CMP(ray, idm);
-#endif // CMP_INTEGRATOR
-
+  color = INTEGRATOR(ray);
 #else
   // view textures in atlas using debug index
   vec2 uv = gl_FragCoord.xy / u_resolution;
@@ -477,30 +422,25 @@ void main() {
   if (all(greaterThan(uv, debugWindowRes))) {
     vec2 previewUv = (uv - debugWindowRes) / (vec2(1) - debugWindowRes);
 
-    color = texture(
-      u_textureAtlas, 
-      vec3(previewUv, 0)
-    ).rgb;
+    color = texture(u_textureAtlas, vec3(previewUv, 0)).rgb;
   } else if (all(lessThan(uv, debugWindowRes))) {
-    vec2 previewUv = uv/debugWindowRes;
     int index = u_debugIndex % MAX_TEXTURES;
     TextureDescriptor tex = u_textureDescriptors[index];
 
-    color = texture( u_textureAtlas, vec3(
-      (tex.offset + tex.size * previewUv) / u_atlasResolution, 
-      0
-    )).rgb;
+    vec2 previewUv = uv / debugWindowRes;
+    vec3 atlasUv = vec3((tex.offset + tex.size * previewUv) / u_atlasResolution, 0);
+
+    color = texture(u_textureAtlas, atlasUv).rgb;
   } else {
-    color = texture(
-      u_devImage, 
-      vec2(uv.x, 1.0-uv.y) * 4.0
-    ).rgb;
+    vec3 devUv = vec2(uv.x, 1.0-uv.y) * 4.0;
+
+    color = texture(u_devImage, devUv).rgb;
   }
 #endif // DEBUG_ATLAS
 
-
-  // final color
-  color = texture(u_TEXCOORD.sampler, gl_FragCoord.xy/u_resolution).xyz;
+  /**
+  * FINAL COLOR
+  */
   fragment = vec4(color, 1);
   
 #ifdef KILL_NANS

@@ -1,3 +1,4 @@
+import { GL_CTX } from './util.js';
 import {
   NUM_BLAS,
   NUM_LIGHTS,
@@ -42,6 +43,16 @@ export const EDITOR_COLOR_SCHEME = window.hydra_EDITOR_COLOR_SCHEME = {
   selection: [0, 0.6, 1],
   focalPlane: [0, 0.6, 1],
   white: [1, 1, 1],
+};
+
+export const TYPE_TO_SIZE = {
+  [GL_CTX.BYTE]: 1,
+  [GL_CTX.UNSIGNED_BYTE]: 1,
+  [GL_CTX.SHORT]: 2,
+  [GL_CTX.UNSIGNED_SHORT]: 2,
+  [GL_CTX.UNSIGNED_INT]: 4,
+  [GL_CTX.INT]: 4,
+  [GL_CTX.FLOAT]: 4,
 };
 
 export const SHADER_DEFINES =
