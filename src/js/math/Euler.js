@@ -17,7 +17,7 @@ export class Euler {
     this._y = e._y;
     this._z = e._z;
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -43,7 +43,7 @@ export class Euler {
     this._y = y ?? this._y;
     this._z = z ?? this._z;
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -84,7 +84,7 @@ export class Euler {
     this._z = Math.atan2(a, b);
     
     if (triggerCallback)
-      this.onchange();
+      this.onchange?.();
     
     return this;
   
@@ -108,7 +108,7 @@ export class Euler {
     },
     set(val) {
       this[privateName] = val;
-      this.onchange();
+      this.onchange?.();
     },
   });
 });

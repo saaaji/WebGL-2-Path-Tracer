@@ -432,7 +432,7 @@ void main() {
 
     color = texture(u_textureAtlas, atlasUv).rgb;
   } else {
-    vec3 devUv = vec2(uv.x, 1.0-uv.y) * 4.0;
+    vec2 devUv = vec2(uv.x, 1.0-uv.y) * 4.0;
 
     color = texture(u_devImage, devUv).rgb;
   }

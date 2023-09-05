@@ -4,6 +4,7 @@ export class DisplayConsole {
   
   static tagMap = {
     '?': 'notice',
+    'info': 'notice',
   };
   
   static getDefault() {

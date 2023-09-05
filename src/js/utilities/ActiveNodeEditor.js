@@ -74,7 +74,7 @@ export class ActiveNodeEditor {
         }
       });
       
-      for (const {prop, mutable, displayName = prop, triggerUpdate = false, mono = false} of props) {
+      for (const {prop, mutable, displayName = prop, triggerUpdate = false, mono = false, deg = false} of props) {
         const value = this.#getProp(node, prop);
         const type = typeof value;
           
@@ -112,6 +112,10 @@ export class ActiveNodeEditor {
             case 'number':
               input.type = 'number';
               typecast = target => Number(target.value);
+
+              if (deg) {
+                typecast = target => Number(target.value) * Math.PI / 180;
+              }
               break;
             case 'boolean':
               input.type = 'checkbox',
@@ -125,6 +129,11 @@ export class ActiveNodeEditor {
           }
           
           input.value = value;
+
+          if (deg) {
+            input.value *= 180 / Math.PI;
+          }
+
           input.disabled = mutable !== true;
           
           if (!mutable) {

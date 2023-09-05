@@ -17,7 +17,7 @@ export class Quaternion {
     this._y = q._y;
     this._z = q._z;
     this._w = q._w;
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -46,7 +46,7 @@ export class Quaternion {
     this._z = z ?? this._z;
     this._w = w ?? this._w;
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -76,7 +76,7 @@ export class Quaternion {
     this._z = qw * pz + pw * qz + qx * py - px * qy;
     this._w = qw * pw - qx * px - qy * py - qz * pz;
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
     
@@ -91,7 +91,7 @@ export class Quaternion {
     this._z = axis.z * sinT;
     this._w = Math.cos(angle / 2);
       
-    this.onchange();
+    this.onchange?.();
     
     return this;
   
@@ -113,7 +113,7 @@ export class Quaternion {
 		this._w = cosX * cosY * cosZ - sinX * sinY * sinZ;
     
     if (triggerCallback)
-      this.onchange();
+      this.onchange?.();
     
     return this;
     
@@ -153,7 +153,7 @@ export class Quaternion {
 			this._z = 0.25 * s;
 		}
 
-		this.onchange();
+		this.onchange?.();
 		return this;
   }
   
@@ -192,7 +192,7 @@ export class Quaternion {
     },
     set(val) {
       this[privateName] = val;
-      this.onchange();
+      this.onchange?.();
     },
   });
 });

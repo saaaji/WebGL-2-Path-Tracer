@@ -13,7 +13,7 @@ export class Vector3 {
     this._y = array[offset + 1];
     this._z = array[offset + 2];
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -58,7 +58,7 @@ export class Vector3 {
     this._y = a.y;
     this._z = a.z;
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -68,7 +68,7 @@ export class Vector3 {
     this._y = y;
     this._z = z;
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -78,7 +78,7 @@ export class Vector3 {
     this._y = Math.min(a.y, b.y);
     this._z = Math.min(a.z, b.z);
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -88,7 +88,7 @@ export class Vector3 {
     this._y = Math.max(a.y, b.y);
     this._z = Math.max(a.z, b.z);
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -98,7 +98,7 @@ export class Vector3 {
     this._y = Math.min(this._y, v[1]);
     this._z = Math.min(this._z, v[2]);
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -108,7 +108,7 @@ export class Vector3 {
     this._y = Math.max(this._y, v[1]);
     this._z = Math.max(this._z, v[2]);
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -118,7 +118,7 @@ export class Vector3 {
     this._y = a.y - b.y;
     this._z = a.z - b.z;
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -128,7 +128,7 @@ export class Vector3 {
     this._y = a.y + b.y;
     this._z = a.z + b.z;
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -138,7 +138,7 @@ export class Vector3 {
     this._y += s;
     this._z += s;
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -148,7 +148,7 @@ export class Vector3 {
     this._y += s1;
     this._z += s2;
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -167,7 +167,7 @@ export class Vector3 {
       this.scale(invW);
     }
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -177,7 +177,7 @@ export class Vector3 {
     this._y *= scalar;
     this._z *= scalar;
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -187,7 +187,7 @@ export class Vector3 {
     this._y *= s1;
     this._z *= s2;
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -205,7 +205,7 @@ export class Vector3 {
     this._y = aZ * bX - aX * bZ;
     this._z = aX * bY - aY * bX;
     
-    this.onchange();
+    this.onchange?.();
     
     return this;
   }
@@ -244,7 +244,7 @@ export class Vector3 {
     this._z = Math.atan2(a, b);
     
     if (triggerCallback) {
-      this.onchange();
+      this.onchange?.();
     }
     
     return this;
@@ -298,7 +298,7 @@ export class Vector3 {
     },
     set(val) {
       this[privateName] = val;
-      this.onchange();
+      this.onchange?.();
     },
   });
 });

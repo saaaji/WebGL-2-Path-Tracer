@@ -1,7 +1,7 @@
 import { SourceCache, ShaderLib } from './utilities/shaders.js';
 import { DisplayConsole } from './utilities/Console.js';
 import { EventTarget, UboBuilder, bufferToImage, canvasToBlob, loadImage } from './utilities/util.js';
-import { SceneGraphNode } from './utilities/SceneGraphNode.js';
+import { SceneGraphNode, CameraNode } from './utilities/SceneGraphNode.js';
 import { FrameGraph } from './utilities/RenderGraph.js';
 import { decodeHydra } from './loading/hydra.js';
 import { MeshBlas } from './utilities/primitives.js';
@@ -29,6 +29,12 @@ const SIZEOF_RGBA32F_TEXEL = 4 * Float32Array.BYTES_PER_ELEMENT;
 export class HydraModel extends EventTarget {
   static [ActiveNodeEditor.editableProperties] = [
     {prop: 'debugIndex', displayName: 'Debug magic number', mutable: true, triggerUpdate: true},
+    {prop: 'emissiveFactor', displayName: 'Emissive factor', mutable: true, triggerUpdate: true},
+    {prop: 'editorCamera.camera.fov', displayName: 'Camera FOV', mutable: true, triggerUpdate: true, deg: true},
+    {prop: 'editorCamera.camera.near', displayName: 'Camera near', mutable: true, triggerUpdate: true},
+    {prop: 'editorCamera.focalDistance', mutable: true, triggerUpdate: true, displayName: 'Focal distance', triggerUpdate: true},
+    {prop: 'editorCamera.lensRadius', mutable: true, triggerUpdate: true, displayName: 'Lens radius', triggerUpdate: true},
+    {prop: 'preferEditorCam', displayName: 'Prefer editor camera', mutable: true, triggerUpdate: true},
   ];
 
   static REQUIRED_WEBGL_EXTENSIONS = [
@@ -80,10 +86,19 @@ export class HydraModel extends EventTarget {
   
   // misc.
   sampleCount = 0;
-  orbitalCamera = new OrbitalCamera(.01, .95, 50);
+  
+  orbitalControls = new OrbitalCamera(.01, .95, 50, .002);
+  editorCamera = new CameraNode({camera: {
+    fov: Math.PI / 4,
+    near: 0.01,
+  }});
+
   focusedNode = null;
   focusedNodes = null;
+
   debugIndex = 0;
+  emissiveFactor = 1;
+  preferEditorCam = false;
 
   constructor(gl) {
     super();
@@ -112,6 +127,31 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
 
   triggerDebug() {
     this.debugIndex++;
+  }
+
+  updateSettings() {
+    this.editorCamera.updateProjectionMatrix(this.dimensions[0] / this.dimensions[1]);
+  }
+
+  updateUniforms(prog) {
+    prog.uniforms.set('u_emissiveFactor', this.emissiveFactor);
+    prog.uniforms.set('u_lensRadius', 0);
+    prog.uniforms.set('u_focalDistance', 1);
+
+    let camera;
+    const cameras = this.sceneGraph.nodes.filter(node => node.type === 'CameraNode');
+
+    if (this.preferEditorCam || cameras.length === 0) {
+      camera = this.editorCamera;
+    } else {
+      camera = cameras[this.debugIndex % cameras.length];
+    }
+
+    prog.uniforms.set('u_lensRadius', camera.lensRadius);
+    prog.uniforms.set('u_focalDistance', camera.focalDistance);
+    
+    prog.uniforms.set('u_projectionMatrixInverse', camera.projectionMatrix.inverse);
+    prog.uniforms.set('u_cameraMatrix', camera.worldMatrix);
   }
   
   async reloadShaders(logShaders = false) {
@@ -179,9 +219,11 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     
     const cameras = this.sceneGraph.nodes.filter(node => node.type === 'CameraNode');
     [this.currentCamera] = cameras;
-    
-    const projectionMatrix = new Matrix4().infinitePerspective(Math.PI/4, .01, width / height);
-    this.orbitalCamera.projectionMatrix.copy(projectionMatrix);
+
+    this.orbitalControls.resetOrigin();
+
+    this.editorCamera.updateProjectionMatrix(width / height);
+    this.orbitalControls.linkCameraNode(this.editorCamera);
     
     // initialize uniform buffers
     this.#initializeUniformBuffers(asset);
@@ -491,8 +533,8 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
         
         
         gBufferShader.uniforms.set('u_debugIndex', this.debugIndex);
-        gBufferShader.uniforms.set('u_projectionMatrix', this.orbitalCamera.projectionMatrix);
-        gBufferShader.uniforms.set('u_viewMatrix', this.orbitalCamera.viewMatrix);
+        gBufferShader.uniforms.set('u_projectionMatrix', this.editorCamera.projectionMatrix);
+        gBufferShader.uniforms.set('u_viewMatrix', this.editorCamera.viewMatrix);
         gBufferShader.uniforms.set('u_worldMatrix', node.worldMatrix);
         gBufferShader.uniforms.set('u_visColor', color);
         gBufferShader.bind(gl);
@@ -577,8 +619,8 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
         const color = focused ? EDITOR_COLOR_SCHEME.selection : EDITOR_COLOR_SCHEME.camera;
         const proj = node.getProjectionMatrix(width / height);
         
-        cameraShader.uniforms.set('u_projectionMatrix', this.orbitalCamera.projectionMatrix);
-        cameraShader.uniforms.set('u_viewMatrix', this.orbitalCamera.viewMatrix);
+        cameraShader.uniforms.set('u_projectionMatrix', this.editorCamera.projectionMatrix);
+        cameraShader.uniforms.set('u_viewMatrix', this.editorCamera.viewMatrix);
         cameraShader.uniforms.set('u_worldMatrix', node.worldMatrix);
         cameraShader.uniforms.set('u_inverseProjectionMatrix', proj.inverse);
         cameraShader.uniforms.set('u_visColor', color);
@@ -696,9 +738,11 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     
     main.uniforms.set('u_resolution', [width, height]);
     main.uniforms.set('u_atlasResolution', [json.atlas.size.width, json.atlas.size.height]);
-    main.uniforms.set('u_emissiveFactor', emissiveFactor);
+    main.uniforms.set('u_emissiveFactor', this.emissiveFactor);
     main.uniforms.set('u_lensRadius', 0);
     main.uniforms.set('u_focalDistance', 1);
+
+    // this.updateUniforms();
     
     const rtxPass = this.fg.addPass('rtx', 'rtx-pass', (gl, vertexArrays, textureBindings) => {
       gl.enable(gl.BLEND);
@@ -711,15 +755,9 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       main.uniforms.set('u_envMap', textureBindings['hdr']);
       main.uniforms.set('u_marginalDistribution', textureBindings['hdr-marg-dist']);
       main.uniforms.set('u_conditionalDistribution', textureBindings['hdr-cond-dist']);
-      
-      main.uniforms.set('u_lensRadius', this.currentCamera.lensRadius);
-      main.uniforms.set('u_focalDistance', this.currentCamera.focalDistance);
-      
-      main.uniforms.set('u_projectionMatrixInverse', this.currentCamera.projectionMatrix);
-      main.uniforms.set('u_projectionMatrixInverse', this.currentCamera.projectionMatrix.inverse);
-      main.uniforms.set('u_cameraMatrix', this.currentCamera.worldMatrix);
-      
       main.uniforms.set('u_debugIndex', this.debugIndex);
+      
+      this.updateUniforms(main);
 
       json.dataTextures.descriptors.forEach(({name, width, height}) => {
         main.uniforms.set(`u_${name}.sampler`, textureBindings[name]);
