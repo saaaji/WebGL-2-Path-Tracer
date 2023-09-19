@@ -376,6 +376,7 @@ html, body {
 /* Scene Graph (Node Tree) */
 #node-tree-container {
   min-height: 10%;
+  max-height: 40%;
   overflow: scroll;
 }
 

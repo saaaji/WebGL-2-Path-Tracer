@@ -56,6 +56,30 @@ export class BinaryBVH {
   get isLeaf() {
     return this.primitive !== null && this.primitive !== undefined;
   }
+
+  intersect(ray) {
+    let tMin = Infinity;
+    let primitive = null;
+    const stack = [this];
+    
+    while (stack.length > 0) {
+      const node = stack.pop();
+      const [hit, t] = ray.intersectsAABB(node.boundingBox);
+
+      if (hit) {
+        if (!node.isLeaf) {
+          stack.push(node.left, node.right);
+        } else {
+          if (t < tMin) {
+            tMin = t;
+            primitive = node.primitive;
+          }
+        }
+      }
+    }
+
+    return primitive?.reference;
+  }
   
   /**
    * serialization for storage as float4 texture

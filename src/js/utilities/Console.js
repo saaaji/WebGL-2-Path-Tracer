@@ -1,3 +1,7 @@
+// import { PREVIEW_DEFAULT_WIDTH } from "../model.js
+
+const PREVIEW_DEFAULT_WIDTH = 512;
+
 export class DisplayConsole {
   static #DEFAULT_INSTANCE = new DisplayConsole(document.querySelector('#console-output-container'));
   static #DEFAULT_MESSAGE = 'DisplayConsole Default Output';
@@ -15,6 +19,8 @@ export class DisplayConsole {
   #timing = {
     default: performance.now(),
   };
+
+  #popup = null;
   
   constructor(outputContainer) {
     this.#container = outputContainer;
@@ -96,9 +102,11 @@ export class DisplayConsole {
     const anchors = files.map(file => {
       const a = document.createElement('a');
       
-      a.href = URL.createObjectURL(file);
-      a.textContent = a.download = file.name;
-      
+      if (file instanceof File) {
+        a.href = URL.createObjectURL(file);
+        a.textContent = a.download = file.name;
+      }
+
       return a;
     });
     

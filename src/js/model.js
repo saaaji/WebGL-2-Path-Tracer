@@ -10,6 +10,7 @@ import { HdrLoader, computeHdrSamplingDistributions } from './loading/HdrLoader.
 import { OrbitalCamera } from './utilities/OrbitCamera.js';
 import { Matrix4 } from './math/Matrix4.js';
 import { ActiveNodeEditor } from './utilities/ActiveNodeEditor.js';
+import { Ray } from './math/Ray.js';
 import {
   CAMERA_VERTICES,
   CAMERA_INDICES,
@@ -20,7 +21,7 @@ import {
 } from './utilities/constants.js';
 
 // preview config
-const PREVIEW_DEFAULT_WIDTH = 512; // use aspect ratio to find height
+export const PREVIEW_DEFAULT_WIDTH = 512; // use aspect ratio to find height
 const SSAA_LEVEL = Math.pow(2, 2);
 
 // misc.
@@ -81,7 +82,10 @@ export class HydraModel extends EventTarget {
   };
   
   // shader compilation
-  sourceCache = new SourceCache(this.constructor.SHADER_PATH);
+  sourceCache = new SourceCache({
+    'glsl': this.constructor.SHADER_PATH,
+    'wgsl': this.constructor.SHADER_PATH + 'gpu/',
+  });
   shaderLib = new ShaderLib();
   
   // misc.
@@ -99,6 +103,14 @@ export class HydraModel extends EventTarget {
   debugIndex = 0;
   emissiveFactor = 1;
   preferEditorCam = false;
+  cachedTlas = null;
+
+
+  pick(u, v) {
+    const ray = Ray.generate(u, v, this.editorCamera.projectionMatrix, this.editorCamera.viewMatrix);
+
+    return this.cachedTlas?.intersect(ray);
+  }
 
   constructor(gl) {
     super();
@@ -123,6 +135,11 @@ export class HydraModel extends EventTarget {
 `Vendor: ${this.gl.getParameter(debugExt.UNMASKED_VENDOR_WEBGL)}
 Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     );
+    DisplayConsole.getDefault().log(
+`Optimizing WebGL2/WebGPU Performance (Windows):
+ * WebGL2: Select OpenGL driver for ANGLE backend
+ * WebGPU: Select Default/D3D driver for ANGLE backend`,
+    'info');
   }
 
   triggerDebug() {
@@ -921,6 +938,8 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     displayConsole.time();
     const tlas = new BinaryBVH(primitives, BinaryBVH.SplitMethod.SAH);
     displayConsole.timeEnd('TLAS Build', 'cpu');
+
+    this.cachedTlas = tlas;
     
     // array of BVH data (tlas always in 0th position)
     const texData = [tlas._serialize()];

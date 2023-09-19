@@ -4,7 +4,7 @@ import { ActiveNodeEditor } from './utilities/ActiveNodeEditor.js';
 import { HydraModel } from './model.js';
 import { encodeHydra } from './loading/hydra.js';
 import { SHADER_DEFINES } from './utilities/constants.js';
-import { assert, jsonToBlob } from './utilities/util.js';
+import { assert, jsonToBlob, blobToImage } from './utilities/util.js';
 import { FrameGraph } from './utilities/RenderGraph.js';
 import { Fits, Node, Histogram } from './plugin/fits/fits.js';
 
@@ -93,6 +93,8 @@ class HydraController extends EventTarget {
   snapshotSampleThreshold = 0;
   mouseDown = false;
   scrollDown = false;
+  clickStart = 0;
+  clickEnd = 0;
 
   frameGraph;
   
@@ -233,7 +235,7 @@ class HydraController extends EventTarget {
               height,
               numTilesX: parseInt(view.numTilesX.value),
               numTilesY: parseInt(view.numTilesY.value),
-              emissiveFactor: parseFloat(view.emissiveFactor.value),
+              // emissiveFactor: parseFloat(view.emissiveFactor.value),
             },
           });
 
@@ -458,7 +460,23 @@ class HydraController extends EventTarget {
     });
     
     // updating editor camera
+    view.canvas.addEventListener('click', ({target, clientX, clientY}) => {
+      const duration = this.clickEnd - this.clickStart;
+      if (duration < 150) {
+        const rect = target.getBoundingClientRect();
+        const u = (clientX - rect.left) / target.width;
+        const v = (rect.bottom - clientY) / target.height;
+        const node = model.pick(u, v);
+
+        if (node) {
+          view.nodeEditor.activeNode = node;
+          model.focusedNode = node;
+          model.focusedNodes = node.nodes;
+        }
+      }
+    });
     view.canvas.addEventListener('mousedown', ({which}) => {
+      this.clickStart = performance.now();
       if (which === 1)
         this.mouseDown = true;
       else if (which === 2)
@@ -466,6 +484,7 @@ class HydraController extends EventTarget {
     });
     view.canvas.addEventListener('mouseleave', () => this.mouseDown = this.scrollDown = false);
     view.canvas.addEventListener('mouseup', ({which}) => {
+      this.clickEnd = performance.now();
       if (which === 1)
         this.mouseDown = false;
       else if (which === 2)
@@ -482,7 +501,7 @@ class HydraController extends EventTarget {
         }
       }
 
-      if (!this.paused && this.scrollDown && 
+      if (!this.paused && (this.keyMap['G'] || this.scrollDown) && 
           (this.mode === HydraController.Mode.RASTER || this.mode === HydraController.Mode.TRACE && model.preferEditorCam)) {
         model.orbitalControls.strafe(dx, dy);
         

@@ -41,7 +41,8 @@ export const EDITOR_COLOR_SCHEME = window.hydra_EDITOR_COLOR_SCHEME = {
   mesh: [0.8, 0.8, 0.8],
   // selection: [1, 0.6, 0],
   selection: [0, 0.6, 1],
-  focalPlane: [0, 0.6, 1],
+  // focalPlane: [0, 0.6, 1],
+  focalPlane: [1, 0, 0.5],
   white: [1, 1, 1],
 };
 
@@ -72,3 +73,7 @@ export const SHADER_DEFINES =
 #define MAX_MATERIALS ${NUM_MATERIALS}
 #define MAX_LIGHTS ${NUM_LIGHTS}
 #define MAX_BLAS ${NUM_BLAS}`;
+
+export const WGSL_ENTRYPOINT_VS = 'hydra_vs_entry';
+export const WGSL_ENTRYPOINT_FS = 'hydra_fs_entry';
+export const WGSL_ENTRYPOINT_COMPUTE = 'hydra_compute_entry';

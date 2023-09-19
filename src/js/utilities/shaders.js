@@ -3,12 +3,14 @@ export class SourceCache {
   
   #modules = new Map();
   
-  constructor(path) {
-    this.path = path;
+  constructor(pathMap) {
+    this.pathMap = pathMap;
   }
   
   async registerModule(name) {
-    const response = await fetch(this.path + name);
+    const ext = name.split('.').at(-1);
+
+    const response = await fetch(this.pathMap[ext] + name);
     const source = await response.text();
     
     this.#modules.set(name, source);
