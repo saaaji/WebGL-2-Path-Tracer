@@ -1,5 +1,7 @@
 import { Vector3 } from '../math/Vector3.js';
 
+const PADDING = 1e-12;
+
 export class AABB {
   #min = new Vector3();
   #max = new Vector3();
@@ -18,7 +20,7 @@ export class AABB {
     zMax = -Infinity,
   ) {
     this.min.set(xMin, yMin, zMin);
-    this.max.set(xMax, yMax, zMax);
+    this.max.set(xMax + PADDING, yMax + PADDING, zMax + PADDING);
     this.update();
   }
   

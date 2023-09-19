@@ -4,7 +4,7 @@ import { ActiveNodeEditor } from './utilities/ActiveNodeEditor.js';
 import { HydraModel } from './model.js';
 import { encodeHydra } from './loading/hydra.js';
 import { SHADER_DEFINES } from './utilities/constants.js';
-import { assert, jsonToBlob } from './utilities/util.js';
+import { assert, jsonToBlob, blobToImage } from './utilities/util.js';
 import { FrameGraph } from './utilities/RenderGraph.js';
 import { Fits, Node, Histogram } from './plugin/fits/fits.js';
 
@@ -22,13 +22,18 @@ class HydraView extends EventTarget {
   emissiveFactor = this.getElement('#emissive-factor');
   threshold = this.getElement('#threshold');
   defines = this.getElement('#defines');
+  logShaders = this.getElement('#log-shaders');
   render = this.getElement('#render');
+
+  pause = this.getElement('#pause-render');
+  toggle = this.getElement('#toggle-mode');
   
   nodeTree = this.getElement('#tree-viewer');
   nodeEditor = ActiveNodeEditor.getDefault();
+  liveSettings = new ActiveNodeEditor(document.querySelector('#node-2'));
   
   canvas = this.getElement('#hydra-canvas');
-  pause = this.getElement('#pause');
+  // pause = this.getElement('#pause');
   
   sampleCount = this.getElement('#sample-count');
   pauseLabel = this.getElement('#p');
@@ -80,13 +85,17 @@ class HydraView extends EventTarget {
 // controller implements application-specific meaning of interface behavior
 class HydraController extends EventTarget {
   static Mode = createEnum('TRACE', 'RASTER', 'PLUGIN', 'NONE');
-  
+
   keyMap = {};
   mode = HydraController.Mode.NONE;
   paused = false;
   lastFrameId = -1;
   snapshotSampleThreshold = 0;
-  
+  mouseDown = false;
+  scrollDown = false;
+  clickStart = 0;
+  clickEnd = 0;
+
   frameGraph;
   
   constructor() {
@@ -95,19 +104,20 @@ class HydraController extends EventTarget {
     const view = this.view = new HydraView();
     const model = this.model = new HydraModel(view.gl);
     
+    this.view.liveSettings.activeNode = model;
+
     view.defines.value = SHADER_DEFINES;
     
     // choose scene interface
     let keyBindingsDown = null;
     let keyBindingsUp = null;
-    
-    document.addEventListener('keydown', ({key}) => {
-      this.keyMap[key] = true;
-    });
-    
+
     document.addEventListener('keyup', ({key}) => {
       this.keyMap[key] = false;
     });
+
+    view.pause.addEventListener('click', () => this.togglePaused());
+    view.toggle.addEventListener('click', () => this.swapModes());
     
     view.render.addEventListener('click', async () => {
       if (keyBindingsDown && keyBindingsUp) {
@@ -134,21 +144,15 @@ class HydraController extends EventTarget {
         case 'hydra':
           this.mode = HydraController.Mode.RASTER;
           
-          keyBindingsDown = (function({key}) { 
+          keyBindingsDown = (function({key}) {
+            this.keyMap[key] = true;
+
             switch (key) {
               case 'p':
                 this.togglePaused();
                 break;
               case 'r':
-                if (this.mode === HydraController.Mode.RASTER) {
-                  this.reset();
-                  model.uploadTlas().then(() => {
-                    this.mode = HydraController.Mode.TRACE;
-                  });
-                } else {
-                  this.reset();
-                  this.mode = HydraController.Mode.RASTER;
-                }
+                this.swapModes();
                 break;
               case 'c':
                 if (this.mode === HydraController.Mode.TRACE) {
@@ -165,7 +169,7 @@ class HydraController extends EventTarget {
                 break;
               case 'l':
                 DisplayConsole.getDefault().clear();
-                DisplayConsole.getDefault().log('Cleared logs', '?');
+                DisplayConsole.getDefault().log('Cleared logs', 'info');
                 break;
               case 't':
                 view.keyBindings.classList.remove('hidden');
@@ -204,6 +208,14 @@ class HydraController extends EventTarget {
               });
             }
           };
+
+          view.liveSettings.updateCallback = () => {
+            model.updateSettings();
+            if (this.mode === HydraController.Mode.TRACE) {
+              // model.updateUniforms();
+              this.reset();
+            }
+          }
           
           const width = parseInt(view.width.value);
           const height = parseInt(view.height.value);
@@ -215,6 +227,7 @@ class HydraController extends EventTarget {
           this.snapshotSampleFactor = parseInt(view.threshold.value);
           
           model.updateState({
+            logShaders: view.logShaders.checked,
             file,
             environmentMap,
             renderConfig: {
@@ -222,9 +235,12 @@ class HydraController extends EventTarget {
               height,
               numTilesX: parseInt(view.numTilesX.value),
               numTilesY: parseInt(view.numTilesY.value),
-              emissiveFactor: parseFloat(view.emissiveFactor.value),
+              // emissiveFactor: parseFloat(view.emissiveFactor.value),
             },
           });
+
+          view.pause.disabled = false;
+          view.toggle.disabled = false;
           break;
         // FITS PLUGIN
         case 'fits':
@@ -440,19 +456,74 @@ class HydraController extends EventTarget {
     
     // updating key map
     view.defines.addEventListener('keydown', event => {
-      event.stopPropagation();
+      // event.stopPropagation();
     });
     
     // updating editor camera
+    view.canvas.addEventListener('click', ({target, clientX, clientY}) => {
+      const duration = this.clickEnd - this.clickStart;
+      if (duration < 150) {
+        const rect = target.getBoundingClientRect();
+        const u = (clientX - rect.left) / target.width;
+        const v = (rect.bottom - clientY) / target.height;
+        const node = model.pick(u, v);
+
+        if (node) {
+          view.nodeEditor.activeNode = node;
+          model.focusedNode = node;
+          model.focusedNodes = node.nodes;
+        }
+      }
+    });
+    view.canvas.addEventListener('mousedown', ({which}) => {
+      this.clickStart = performance.now();
+      if (which === 1)
+        this.mouseDown = true;
+      else if (which === 2)
+        this.scrollDown = true;
+    });
+    view.canvas.addEventListener('mouseleave', () => this.mouseDown = this.scrollDown = false);
+    view.canvas.addEventListener('mouseup', ({which}) => {
+      this.clickEnd = performance.now();
+      if (which === 1)
+        this.mouseDown = false;
+      else if (which === 2)
+        this.scrollDown = false;
+    });
+
     view.canvas.addEventListener('mousemove', ({movementX: dx, movementY: dy, offsetX: x, offsetY: y}) => {
-      if (!this.paused && this.keyMap['g'] && this.mode === HydraController.Mode.RASTER) {
-        model.orbitalCamera.pan(dx, dy);
+      if (!this.paused && (this.keyMap['g'] || this.mouseDown) && 
+          (this.mode === HydraController.Mode.RASTER || this.mode === HydraController.Mode.TRACE && model.preferEditorCam)) {
+        model.orbitalControls.pan(dx, dy);
+        
+        if (this.mode === HydraController.Mode.TRACE) {
+          this.reset();
+        }
+      }
+
+      if (!this.paused && (this.keyMap['G'] || this.scrollDown) && 
+          (this.mode === HydraController.Mode.RASTER || this.mode === HydraController.Mode.TRACE && model.preferEditorCam)) {
+        model.orbitalControls.strafe(dx, dy);
+        
+        if (this.mode === HydraController.Mode.TRACE) {
+          this.reset();
+        }
       }
     });
     
+    this.lastWheel = 0;
+    this.wheeling = false;
     view.canvas.addEventListener('wheel', ({deltaY: dy}) => {
-      if (!this.paused && this.mode === HydraController.Mode.RASTER) {
-        model.orbitalCamera.zoom(dy);
+      if (!this.paused && 
+          (this.mode === HydraController.Mode.RASTER || this.mode === HydraController.Mode.TRACE && model.preferEditorCam)) {
+        model.orbitalControls.zoom(dy);
+        
+        if (this.mode === HydraController.Mode.TRACE) {
+          this.reset();
+        }
+
+        this.wheeling = true;
+        this.lastWheel = performance.now();
       }
     });
     
@@ -469,6 +540,20 @@ class HydraController extends EventTarget {
       event.target.removeAttribute('disabled');
     });
   }
+
+  swapModes() {
+    if (this.mode === HydraController.Mode.RASTER) {
+      this.view.pause.disabled = false;
+      this.reset();
+      this.model.uploadTlas().then(() => {
+        this.mode = HydraController.Mode.TRACE;
+      });
+    } else {
+      this.view.pause.disabled = true;
+      this.reset();
+      this.mode = HydraController.Mode.RASTER;
+    }
+  }
   
   togglePaused() {
     this.paused = !this.paused;
@@ -482,11 +567,11 @@ class HydraController extends EventTarget {
       this.view.unpauseLabel.style = '';
     }
     
-    if (this.mode === HydraController.Mode.TRACE) {
+    if (this.mode === HydraController.Mode.TRACE || this.mode === HydraController.Mode.RASTER) {
       if (this.paused) {
-        DisplayConsole.getDefault().log('Pausing shader', '?');
+        DisplayConsole.getDefault().log('Pausing shader', 'info');
       } else {
-        DisplayConsole.getDefault().log('Unpausing shader', '?');
+        DisplayConsole.getDefault().log('Unpausing shader', 'info');
       }
     }
   }
@@ -510,7 +595,7 @@ class HydraController extends EventTarget {
       DisplayConsole.getDefault().logDownloadable`Snapshot: ${file}`;
     });
   }
-  
+
   render = () => {
     switch (this.mode) {
       case HydraController.Mode.RASTER:
@@ -522,11 +607,18 @@ class HydraController extends EventTarget {
         this.view.sampleCount.textContent = this.model.sampleCount;
         
         if (this.snapshotSampleFactor > 1 && this.model.sampleCount === this.snapshotSampleThreshold) {
-          this.logSnapshot();
+          if (!this.mouseDown && !this.wheeling && !this.scrollDown) {
+            this.logSnapshot();
+          }
+
           this.snapshotSampleThreshold *= this.snapshotSampleFactor;
         }
         
         break;
+    }
+
+    if (performance.now() - this.lastWheel > 200) {
+      this.wheeling = false;
     }
     
     this.frameGraph.execute('view');

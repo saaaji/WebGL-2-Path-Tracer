@@ -3,6 +3,23 @@ import { DisplayConsole } from './Console.js';
 export const GL_CTX = document.createElement('canvas').getContext('webgl2');
 
 // misc. utility functions
+export function* enumerate(iterable) {
+  const iter = iterable[Symbol.iterator]();
+  let item = iter.next();
+  let index = 0;
+
+  while (!item.done) {
+    yield [item.value, index++];
+    item = iter.next();
+  }
+}
+
+export const lowQualityId = () => Math
+  .random()
+  .toString(36)
+  .substr(2, 9)
+  .toUpperCase();
+
 export const clamp = (n, min = -Infinity, max = Infinity) => Math.min(max, Math.max(min, n));
 
 export const canvasToBlob = (canvas, mimeType = 'image/png', quality = 1) => new Promise(resolve => {

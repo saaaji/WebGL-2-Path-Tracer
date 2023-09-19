@@ -1,3 +1,11 @@
+import { GL_CTX } from './util.js';
+import {
+  NUM_BLAS,
+  NUM_LIGHTS,
+  NUM_MATERIALS,
+  NUM_TEXTURES,
+} from '../loading/hydra.js';
+
 // inline camera geometry
 export const CAMERA_VERTICES = [
   -1, -1, -1,
@@ -31,8 +39,21 @@ export const FOCAL_DIST_OUTLINE_VERTICES = [
 export const EDITOR_COLOR_SCHEME = window.hydra_EDITOR_COLOR_SCHEME = {
   camera: [0.15, 0.15, 0.15],
   mesh: [0.8, 0.8, 0.8],
-  selection: [1, 0.6, 0],
-  focalPlane: [0, 0.6, 1],
+  // selection: [1, 0.6, 0],
+  selection: [0, 0.6, 1],
+  // focalPlane: [0, 0.6, 1],
+  focalPlane: [1, 0, 0.5],
+  white: [1, 1, 1],
+};
+
+export const TYPE_TO_SIZE = {
+  [GL_CTX.BYTE]: 1,
+  [GL_CTX.UNSIGNED_BYTE]: 1,
+  [GL_CTX.SHORT]: 2,
+  [GL_CTX.UNSIGNED_SHORT]: 2,
+  [GL_CTX.UNSIGNED_INT]: 4,
+  [GL_CTX.INT]: 4,
+  [GL_CTX.FLOAT]: 4,
 };
 
 export const SHADER_DEFINES =
@@ -42,4 +63,17 @@ export const SHADER_DEFINES =
 #define KILL_NANS
 #define INTEGRATOR traceRay
 //#define CMP_INTEGRATOR traceRay_CMP
-#define CMP_TILE_SIZE 64.0`;
+#define CMP_TILE_SIZE 64.0
+//#define DEBUG_ATLAS
+//#define UV_CHECKERBOARD
+//#define CULL_FACE
+
+// BUFFER SIZING INFO (DO NOT TOUCH)
+#define MAX_TEXTURES ${NUM_TEXTURES}
+#define MAX_MATERIALS ${NUM_MATERIALS}
+#define MAX_LIGHTS ${NUM_LIGHTS}
+#define MAX_BLAS ${NUM_BLAS}`;
+
+export const WGSL_ENTRYPOINT_VS = 'hydra_vs_entry';
+export const WGSL_ENTRYPOINT_FS = 'hydra_fs_entry';
+export const WGSL_ENTRYPOINT_COMPUTE = 'hydra_compute_entry';

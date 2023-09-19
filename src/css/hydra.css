@@ -11,6 +11,11 @@
   --border-color: #808080;
 }
 
+/* Chrome? */
+::-webkit-scrollbar{
+  display: none;
+}
+
 ::selection {
   background: var(--highlight-color);
   color: var(--bg-color);
@@ -108,7 +113,7 @@ html, body {
 
 .ui-content-row textarea {
   width: calc(50% - 2 * 0.3em);
-  min-height: 2ch;
+  min-height: 10ch;
   background-color: var(--bg-color);
   border: none;
   border-radius: 0.1em;
@@ -371,6 +376,7 @@ html, body {
 /* Scene Graph (Node Tree) */
 #node-tree-container {
   min-height: 10%;
+  max-height: 40%;
   overflow: scroll;
 }
 
@@ -386,7 +392,7 @@ html, body {
 }
 
 /* Active Node */
-#active-node-container.empty {
+.active-node-container.empty {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -397,7 +403,7 @@ html, body {
   user-select: none;
 }
 
-#active-node-container .ui-content-row label {
+.active-node-container .ui-content-row label {
   padding: 0 1em 0 0;
   text-align: right;
 }

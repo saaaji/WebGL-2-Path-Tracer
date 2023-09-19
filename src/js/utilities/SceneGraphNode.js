@@ -116,6 +116,21 @@ export class SceneGraphNode extends Node {
     
     this.children.forEach(child => child.update());
   }
+
+  // update vectors via matrix decomposition
+  _decompose() {
+    this.position.onchange = null;
+    this.scale.onchange = null;
+    this.rotation.onchange = null;
+    this.#quat.onchange = null;
+
+    this.matrix.decompose(this.position, this.#quat, this.scale);
+    
+    this.position.onchange = this.constructor[onPositionChange].bind(this);
+    this.scale.onchange = this.constructor[onScaleChange].bind(this);
+    this.rotation.onchange = this.constructor[onEulerChange].bind(this);
+    this.#quat.onchange = this.constructor[onQuaternionChange].bind(this);
+  }
   
   // helper method for serialization
   getJsonData() {
@@ -272,6 +287,8 @@ export class MeshNode extends SceneGraphNode {
   // construct from JSON-friendly descriptor
   constructor({
     mesh: {
+      // 9/3/23 ss - something's wrong
+      // renderable = true,
       renderable = false,
       index,
       boundingBox: {min, max},
@@ -281,6 +298,7 @@ export class MeshNode extends SceneGraphNode {
     super(descriptor);
     
     this.mesh.renderable = renderable;
+    // this.mesh.renderable = true;
     this.mesh.index = index;
     this.mesh.boundingBox = new AABB(...min, ...max);
   }
@@ -371,6 +389,10 @@ export class CameraNode extends SceneGraphNode {
     );
     
     return this;
+  }
+
+  get viewMatrix() {
+    return this.matrix.inverse;
   }
   
   get focalDistance() {

@@ -104,14 +104,14 @@ export class GlbLoader {
     
     // store emissive primitives for NEE
     const emissivePrimitives = [];
-    
+
     let meshIndex = 0;
     meshNodes.forEach(({mesh}) => {
       const {index} = mesh;
       const {primitives} = json.meshes[index];
       
       // determine if mesh is renderable
-      if (primitives.every(({mode}) => mode !== 4)) {
+      if (primitives.every(({mode = 4}) => mode !== 4)) {
         mesh.renderable = false;
         return;
       }

@@ -3,12 +3,14 @@ export class SourceCache {
   
   #modules = new Map();
   
-  constructor(path) {
-    this.path = path;
+  constructor(pathMap) {
+    this.pathMap = pathMap;
   }
   
   async registerModule(name) {
-    const response = await fetch(this.path + name);
+    const ext = name.split('.').at(-1);
+
+    const response = await fetch(this.pathMap[ext] + name);
     const source = await response.text();
     
     this.#modules.set(name, source);
@@ -56,9 +58,9 @@ export class Pipeline {
   constructor(gl, {
     vertexSource,
     fragmentSource,
-  }) {
-    const vertexShader = createShader(gl, vertexSource, gl.VERTEX_SHADER);
-    const fragmentShader = createShader(gl, fragmentSource, gl.FRAGMENT_SHADER);
+  }, logShaders = false) {
+    const vertexShader = createShader(gl, vertexSource, gl.VERTEX_SHADER, logShaders);
+    const fragmentShader = createShader(gl, fragmentSource, gl.FRAGMENT_SHADER, logShaders);
     const program = createProgram(gl, vertexShader, fragmentShader);
     
     this.#vertexShader = vertexShader;
@@ -87,6 +89,8 @@ export class Pipeline {
     this.buffers.forEach(name => {
       const index = gl.getUniformBlockIndex(program, name);
       this.#bufferIndices.set(name, index);
+
+      //console.log(name, gl.getActiveUniformBlockParameter(program, index, gl.UNIFORM_BLOCK_DATA_SIZE));
     });
   }
   
@@ -127,8 +131,8 @@ export class Pipeline {
 export class ShaderLib {
   shaders = new Map();
   
-  addShader(name, gl, source) {
-    const shader = new Pipeline(gl, source);
+  addShader(name, gl, source, logShaders = false) {
+    const shader = new Pipeline(gl, source, logShaders);
     this.shaders.set(name, shader);
     return shader;
   }
@@ -182,14 +186,22 @@ function createProgram(gl, vertexShader, fragmentShader) {
   throw new Error(message);
 }
 
-function createShader(gl, source, type) {
+function createShader(gl, source, type, logShaders = false) {
   const shader = gl.createShader(type);
   
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
   
-  const debugStr = source.split('\n').map((line, i) => (i + 1).toString().padEnd(5, ' ')+line).join('\n');
-  console.log("== PROCESSED SHADER ==\n" + debugStr);
+  if (logShaders) {
+    const debugStr = source
+      .split('\n')
+      .map((line, i) => (i + 1)
+      .toString()
+      .padEnd(5, ' ')+line)
+      .join('\n');
+
+    console.log(`[PREPROCESSED SHADER (logShaders=true)]\n${debugStr}`);
+  }
 
   if (gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
     return shader;

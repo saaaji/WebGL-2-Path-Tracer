@@ -60,8 +60,10 @@ export class MeshBlas {
   #id;
   #boundingBox = new AABB();
   #name;
+  #reference;
   
-  constructor({mesh: {boundingBox}, worldMatrix, name}, index) {
+  constructor(meshNode, index) {
+    const {mesh: {boundingBox}, worldMatrix, name} = meshNode;
     const min = boundingBox.min.clone();
     const max = boundingBox.max.clone();
     
@@ -91,6 +93,7 @@ export class MeshBlas {
     this.#id = index;
     this.#boundingBox.update();
     this.#name = name;
+    this.#reference = meshNode;
   }
   
   get id() {
@@ -99,5 +102,13 @@ export class MeshBlas {
   
   get boundingBox() {
     return this.#boundingBox;
+  }
+
+  get name() {
+    return this.#name;
+  }
+
+  get reference() {
+    return this.#reference;
   }
 }

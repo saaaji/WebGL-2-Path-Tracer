@@ -7,6 +7,10 @@
   --border-color: #808080;
 }
 
+::-webkit-scrollbar{
+  display: none;
+}
+
 .tree-root {
   flex-grow: 1;
   /*border: 1px solid var(--border-color);*/

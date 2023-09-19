@@ -1,7 +1,7 @@
 import { SourceCache, ShaderLib } from './utilities/shaders.js';
 import { DisplayConsole } from './utilities/Console.js';
-import { EventTarget, UboBuilder, bufferToImage, canvasToBlob } from './utilities/util.js';
-import { SceneGraphNode } from './utilities/SceneGraphNode.js';
+import { EventTarget, UboBuilder, bufferToImage, canvasToBlob, loadImage } from './utilities/util.js';
+import { SceneGraphNode, CameraNode } from './utilities/SceneGraphNode.js';
 import { FrameGraph } from './utilities/RenderGraph.js';
 import { decodeHydra } from './loading/hydra.js';
 import { MeshBlas } from './utilities/primitives.js';
@@ -9,22 +9,35 @@ import { BinaryBVH } from './accel/BVHNode.js';
 import { HdrLoader, computeHdrSamplingDistributions } from './loading/HdrLoader.js';
 import { OrbitalCamera } from './utilities/OrbitCamera.js';
 import { Matrix4 } from './math/Matrix4.js';
+import { ActiveNodeEditor } from './utilities/ActiveNodeEditor.js';
+import { Ray } from './math/Ray.js';
 import {
   CAMERA_VERTICES,
   CAMERA_INDICES,
   FOCAL_DIST_PLANE_VERTICES,
   FOCAL_DIST_OUTLINE_VERTICES,
   EDITOR_COLOR_SCHEME,
+  TYPE_TO_SIZE,
 } from './utilities/constants.js';
 
 // preview config
-const PREVIEW_DEFAULT_WIDTH = 512; // use aspect ratio to find height
+export const PREVIEW_DEFAULT_WIDTH = 512; // use aspect ratio to find height
 const SSAA_LEVEL = Math.pow(2, 2);
 
 // misc.
 const SIZEOF_RGBA32F_TEXEL = 4 * Float32Array.BYTES_PER_ELEMENT;
 
 export class HydraModel extends EventTarget {
+  static [ActiveNodeEditor.editableProperties] = [
+    {prop: 'debugIndex', displayName: 'Debug magic number', mutable: true, triggerUpdate: true},
+    {prop: 'emissiveFactor', displayName: 'Emissive factor', mutable: true, triggerUpdate: true},
+    {prop: 'editorCamera.camera.fov', displayName: 'Camera FOV', mutable: true, triggerUpdate: true, deg: true},
+    {prop: 'editorCamera.camera.near', displayName: 'Camera near', mutable: true, triggerUpdate: true},
+    {prop: 'editorCamera.focalDistance', mutable: true, triggerUpdate: true, displayName: 'Focal distance', triggerUpdate: true},
+    {prop: 'editorCamera.lensRadius', mutable: true, triggerUpdate: true, displayName: 'Lens radius', triggerUpdate: true},
+    {prop: 'preferEditorCam', displayName: 'Prefer editor camera', mutable: true, triggerUpdate: true},
+  ];
+
   static REQUIRED_WEBGL_EXTENSIONS = [
     'WEBGL_debug_renderer_info',
     'OES_texture_float_linear',
@@ -53,6 +66,7 @@ export class HydraModel extends EventTarget {
     'icons.glsl',
     'cameraFrag.glsl',
     'gradient.glsl',
+    'tex.glsl',
   ];
   
   static PROGRAM_INFO = {
@@ -68,15 +82,36 @@ export class HydraModel extends EventTarget {
   };
   
   // shader compilation
-  sourceCache = new SourceCache(this.constructor.SHADER_PATH);
+  sourceCache = new SourceCache({
+    'glsl': this.constructor.SHADER_PATH,
+    'wgsl': this.constructor.SHADER_PATH + 'gpu/',
+  });
   shaderLib = new ShaderLib();
   
   // misc.
   sampleCount = 0;
-  orbitalCamera = new OrbitalCamera(.01, .95, 50);
+  
+  orbitalControls = new OrbitalCamera(.01, .95, 50, .002);
+  editorCamera = new CameraNode({camera: {
+    fov: Math.PI / 4,
+    near: 0.01,
+  }});
+
   focusedNode = null;
   focusedNodes = null;
-  
+
+  debugIndex = 0;
+  emissiveFactor = 1;
+  preferEditorCam = false;
+  cachedTlas = null;
+
+
+  pick(u, v) {
+    const ray = Ray.generate(u, v, this.editorCamera.projectionMatrix, this.editorCamera.viewMatrix);
+
+    return this.cachedTlas?.intersect(ray);
+  }
+
   constructor(gl) {
     super();
     
@@ -100,9 +135,43 @@ export class HydraModel extends EventTarget {
 `Vendor: ${this.gl.getParameter(debugExt.UNMASKED_VENDOR_WEBGL)}
 Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     );
+    DisplayConsole.getDefault().log(
+`Optimizing WebGL2/WebGPU Performance (Windows):
+ * WebGL2: Select OpenGL driver for ANGLE backend
+ * WebGPU: Select Default/D3D driver for ANGLE backend`,
+    'info');
+  }
+
+  triggerDebug() {
+    this.debugIndex++;
+  }
+
+  updateSettings() {
+    this.editorCamera.updateProjectionMatrix(this.dimensions[0] / this.dimensions[1]);
+  }
+
+  updateUniforms(prog) {
+    prog.uniforms.set('u_emissiveFactor', this.emissiveFactor);
+    prog.uniforms.set('u_lensRadius', 0);
+    prog.uniforms.set('u_focalDistance', 1);
+
+    let camera;
+    const cameras = this.sceneGraph.nodes.filter(node => node.type === 'CameraNode');
+
+    if (this.preferEditorCam || cameras.length === 0) {
+      camera = this.editorCamera;
+    } else {
+      camera = cameras[this.debugIndex % cameras.length];
+    }
+
+    prog.uniforms.set('u_lensRadius', camera.lensRadius);
+    prog.uniforms.set('u_focalDistance', camera.focalDistance);
+    
+    prog.uniforms.set('u_projectionMatrixInverse', camera.projectionMatrix.inverse);
+    prog.uniforms.set('u_cameraMatrix', camera.worldMatrix);
   }
   
-  async reloadShaders() {
+  async reloadShaders(logShaders = false) {
     // fetch/reload shader fragments
     await Promise.all(
       this.constructor.SHADER_SRC.map(file => this.sourceCache.registerModule(file)),
@@ -123,12 +192,13 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       this.shaderLib.addShader(name, this.gl, {
         vertexSource,
         fragmentSource,
-      });
+      }, logShaders);
     }
   }
   
   // load necessary state from asset file and reload shaders
   async updateState({
+    logShaders,
     file,
     environmentMap,
     renderConfig: {
@@ -143,7 +213,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     this.dimensions = [width, height];
     
     // update shaders
-    await this.reloadShaders();
+    await this.reloadShaders(logShaders);
     
     // initialize GPU resources
     const gl = this.gl;
@@ -166,9 +236,11 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     
     const cameras = this.sceneGraph.nodes.filter(node => node.type === 'CameraNode');
     [this.currentCamera] = cameras;
-    
-    const projectionMatrix = new Matrix4().infinitePerspective(Math.PI/4, .01, width / height);
-    this.orbitalCamera.projectionMatrix.copy(projectionMatrix);
+
+    this.orbitalControls.resetOrigin();
+
+    this.editorCamera.updateProjectionMatrix(width / height);
+    this.orbitalControls.linkCameraNode(this.editorCamera);
     
     // initialize uniform buffers
     this.#initializeUniformBuffers(asset);
@@ -225,11 +297,33 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     });
     
+    const devImage = await loadImage('./assets/images/hydra_dev_placeholder.png');
+
+    this.fg.createTexture('dev-image', FrameGraph.Tex.TEXTURE_2D, (gl, tex) => {
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.SRGB8_ALPHA8,
+        devImage.width,
+        devImage.height,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        devImage,
+      );
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR );
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    });
+
     await this.uploadTlas();
     await this.#initializeEnvMap(environmentMap);
     
     // data textures
-    this.fg.createVertexArray('scene-geometry', (gl, vertexArray) => {
+    this.fg.createVertexArray('scene-geometry', async (gl, vertexArray) => {
       const dataTexBuffer = asset.getBufferView(asset.json.dataTextures.bufferView);
   
       this.fg.createBuffer('unpack-buffer', (gl, buf) => {
@@ -250,16 +344,37 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-          gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, offset);
+          
+          /**
+           * fix for apparent alignment issue (when offset % 8 != 0)
+           * maybe abstain from using PIXEL_UNPACK_BUFFER
+           */
+          if (name !== 'TEXCOORD') {
+            gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, offset);
+          } else {
+            const uvData = new Float32Array(
+              dataTexBuffer.slice(offset, offset + numComponents * width * height * TYPE_TO_SIZE[type])
+            );
+
+            gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
+            gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, uvData);
+            gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, this.fg.getBuffer('unpack-buffer'));
+          }
         });
-        
+
         switch (name) {
           case 'FACE':
             gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, dataTexBuffer.slice(offset), gl.STATIC_DRAW);
             break;
+          case 'MATERIAL':
+            var location = gBufferShader.attribs.get('a_MATERIAL');
+            gl.vertexAttribIPointer(location, numComponents, type, 0, offset);
+            gl.enableVertexAttribArray(location);
+            break;
           case 'VERTEX':
           case 'NORMAL':
-            const location = gBufferShader.attribs.get(`a_${name}`);
+          case 'TEXCOORD':
+            var location = gBufferShader.attribs.get(`a_${name}`);
             gl.vertexAttribPointer(location, numComponents, type, false, 0, offset);
             gl.enableVertexAttribArray(location);
             break;
@@ -274,8 +389,6 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     const aspectRatio = width / height;
     const previewWidth = PREVIEW_DEFAULT_WIDTH * SSAA_LEVEL;
     const previewHeight = Math.floor(PREVIEW_DEFAULT_WIDTH / aspectRatio) * SSAA_LEVEL;
-    
-    console.log(previewWidth, previewHeight, previewWidth / previewHeight);
     
     this.fg.createTexture('g-color0', FrameGraph.Tex.TEXTURE_2D, (gl, texture) => {
       gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -427,12 +540,18 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       const gBufferShader = this.shaderLib.getShader('g-buffer');
       gl.bindVertexArray(vertexArrays.get('scene-geometry'));
       
+      gBufferShader.uniforms.set('u_textureAtlas', textureBindings['texture-atlas']);
+      gBufferShader.uniforms.set('u_atlasResolution', [json.atlas.size.width, json.atlas.size.height]);
+    
+
       this.sceneGraph.nodes.filter(node => node.type === 'MeshNode').forEach(node => {
         const descriptor = json.meshDescriptors.find(d => d.meshIndex === node.mesh.index);
-        const color = (this.focusedNode === node || this.focusedNodes?.includes(node)) ? EDITOR_COLOR_SCHEME.selection : EDITOR_COLOR_SCHEME.mesh;
+        const color = (this.focusedNode === node || this.focusedNodes?.includes(node)) ? EDITOR_COLOR_SCHEME.selection : EDITOR_COLOR_SCHEME.white;
         
-        gBufferShader.uniforms.set('u_projectionMatrix', this.orbitalCamera.projectionMatrix);
-        gBufferShader.uniforms.set('u_viewMatrix', this.orbitalCamera.viewMatrix);
+        
+        gBufferShader.uniforms.set('u_debugIndex', this.debugIndex);
+        gBufferShader.uniforms.set('u_projectionMatrix', this.editorCamera.projectionMatrix);
+        gBufferShader.uniforms.set('u_viewMatrix', this.editorCamera.viewMatrix);
         gBufferShader.uniforms.set('u_worldMatrix', node.worldMatrix);
         gBufferShader.uniforms.set('u_visColor', color);
         gBufferShader.bind(gl);
@@ -442,6 +561,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     });
     
     // specify pass outputs
+    gBufferPass.addTextureInput('texture-atlas');
     gBufferPass.addColorOutput('g-color0');
     gBufferPass.addColorOutput('g-normals');
     gBufferPass.setDepthOutput('g-depth');
@@ -516,8 +636,8 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
         const color = focused ? EDITOR_COLOR_SCHEME.selection : EDITOR_COLOR_SCHEME.camera;
         const proj = node.getProjectionMatrix(width / height);
         
-        cameraShader.uniforms.set('u_projectionMatrix', this.orbitalCamera.projectionMatrix);
-        cameraShader.uniforms.set('u_viewMatrix', this.orbitalCamera.viewMatrix);
+        cameraShader.uniforms.set('u_projectionMatrix', this.editorCamera.projectionMatrix);
+        cameraShader.uniforms.set('u_viewMatrix', this.editorCamera.viewMatrix);
         cameraShader.uniforms.set('u_worldMatrix', node.worldMatrix);
         cameraShader.uniforms.set('u_inverseProjectionMatrix', proj.inverse);
         cameraShader.uniforms.set('u_visColor', color);
@@ -635,9 +755,11 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     
     main.uniforms.set('u_resolution', [width, height]);
     main.uniforms.set('u_atlasResolution', [json.atlas.size.width, json.atlas.size.height]);
-    main.uniforms.set('u_emissiveFactor', emissiveFactor);
+    main.uniforms.set('u_emissiveFactor', this.emissiveFactor);
     main.uniforms.set('u_lensRadius', 0);
     main.uniforms.set('u_focalDistance', 1);
+
+    // this.updateUniforms();
     
     const rtxPass = this.fg.addPass('rtx', 'rtx-pass', (gl, vertexArrays, textureBindings) => {
       gl.enable(gl.BLEND);
@@ -645,18 +767,15 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       gl.blendFunc(gl.ONE, gl.ONE);
       
       main.uniforms.set('u_currentSample', this.sampleCount);
+      main.uniforms.set('u_devImage', textureBindings['dev-image']);
       main.uniforms.set('u_textureAtlas', textureBindings['texture-atlas']);
       main.uniforms.set('u_envMap', textureBindings['hdr']);
       main.uniforms.set('u_marginalDistribution', textureBindings['hdr-marg-dist']);
       main.uniforms.set('u_conditionalDistribution', textureBindings['hdr-cond-dist']);
+      main.uniforms.set('u_debugIndex', this.debugIndex);
       
-      main.uniforms.set('u_lensRadius', this.currentCamera.lensRadius);
-      main.uniforms.set('u_focalDistance', this.currentCamera.focalDistance);
-      
-      main.uniforms.set('u_projectionMatrixInverse', this.currentCamera.projectionMatrix);
-      main.uniforms.set('u_projectionMatrixInverse', this.currentCamera.projectionMatrix.inverse);
-      main.uniforms.set('u_cameraMatrix', this.currentCamera.worldMatrix);
-      
+      this.updateUniforms(main);
+
       json.dataTextures.descriptors.forEach(({name, width, height}) => {
         main.uniforms.set(`u_${name}.sampler`, textureBindings[name]);
         main.uniforms.set(`u_${name}.size`, [width, height]);
@@ -677,6 +796,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       this.sampleCount++;
     });
     
+    rtxPass.addTextureInput('dev-image');
     rtxPass.addTextureInput('texture-atlas');
     rtxPass.addTextureInput('bvh');
     rtxPass.addTextureInput('hdr');
@@ -779,7 +899,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     ]) {
       this.fg.createBuffer(name, (gl, buf) => {
         gl.bindBuffer(gl.UNIFORM_BUFFER, buf);
-        
+
         if (bufferView) {
           const data = this.asset.getBufferView(bufferView);
           gl.bufferData(gl.UNIFORM_BUFFER, data, gl.STATIC_DRAW);
@@ -814,10 +934,12 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     
     // build top-level hierarchy
     const primitives = meshes.map((mesh, i) => new MeshBlas(mesh, i));
-    
+
     displayConsole.time();
     const tlas = new BinaryBVH(primitives, BinaryBVH.SplitMethod.SAH);
     displayConsole.timeEnd('TLAS Build', 'cpu');
+
+    this.cachedTlas = tlas;
     
     // array of BVH data (tlas always in 0th position)
     const texData = [tlas._serialize()];

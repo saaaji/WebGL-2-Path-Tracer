@@ -7,6 +7,7 @@ const MIN_DIST = 0.01;
 const UP = new Vector3(0, 1, 0);
 
 export class OrbitalCamera {
+  #originMatrix = new Matrix4();
   #matrix = new Matrix4();
   #distance;
   
@@ -15,20 +16,31 @@ export class OrbitalCamera {
     phi: Math.PI / 2,
     theta: 0,
   };
-  
+
+  #origin = new Vector3();
+
   // basis vectors for camera matrix
   #z = new Vector3();
   #x = new Vector3();
   #y = new Vector3();
+
+  #cameraNode = null;
   
-  constructor(panSpeed, zoomSpeed, distance, onchange = null) {
+  constructor(panSpeed, zoomSpeed, distance, strafeSpeed, onchange = null) {
     this.panSpeed = panSpeed;
     this.zoomSpeed = zoomSpeed;
+    this.strafeSpeed = strafeSpeed,
     this.onchange = onchange;
     this.#distance = distance;
     
+    /** @deprecated */
     this.projectionMatrix = new Matrix4();
     
+    this.#update();
+  }
+
+  resetOrigin() {
+    this.#origin.set(0, 0, 0);
     this.#update();
   }
   
@@ -46,6 +58,14 @@ export class OrbitalCamera {
     this.#matrix.setColumn(1, this.#y);
     this.#matrix.setColumn(2, this.#z);
     this.#matrix.setColumn(3, this.#z.clone().scale(this.#distance));
+
+    this.#originMatrix.setColumn(3, this.#origin);
+
+    this.#matrix.premultiply(this.#originMatrix);
+
+    this.#cameraNode?.matrix.copy(this.#matrix);
+    this.#cameraNode?._decompose();
+    this.#cameraNode?.update();
     
     this.onchange?.();
   }
@@ -59,7 +79,16 @@ export class OrbitalCamera {
     );
     this.#update();
   }
-  
+
+  strafe(dx, dy) {
+    const ratio = this.zoomSpeed / this.strafeSpeed;
+
+    this.#origin
+      .addVectors(this.#origin, this.#x.clone().scale(-dx * this.#distance / ratio))
+      .addVectors(this.#origin, this.#y.clone().scale(dy * this.#distance / ratio))
+
+    this.#update();
+  }
   
   // respond to 'wheel' event
   zoom(dy) {
@@ -68,6 +97,11 @@ export class OrbitalCamera {
       MIN_DIST,
       Infinity,
     );
+    this.#update();
+  }
+
+  linkCameraNode(cameraNode) {
+    this.#cameraNode = cameraNode;
     this.#update();
   }
   
