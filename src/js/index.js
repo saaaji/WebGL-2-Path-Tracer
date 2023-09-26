@@ -36,6 +36,7 @@ class HydraView extends EventTarget {
   // pause = this.getElement('#pause');
   
   sampleCount = this.getElement('#sample-count');
+  fps = this.getElement('#fps');
   pauseLabel = this.getElement('#p');
   unpauseLabel = this.getElement('#u');
   
@@ -75,6 +76,38 @@ class HydraView extends EventTarget {
     this.nodeTree.addEventListener('change', ({target}) => {
       this.nodeEditor.activeNode = target.selectedNode;
     });
+
+    const images = [...document.querySelectorAll('.section-toggle')];
+    const numExpandedInCol = (images, col) => images
+      .filter(i => i.dataset.col == col && i.dataset.hidden === 'f')
+      .length;
+
+    for (const img of images) {
+      const contentId = img.dataset.for;
+      const contentDiv = document.getElementById(contentId);
+
+      img.dataset.hidden = 'f';
+      img.addEventListener('click', () => {
+        if (img.dataset.ignore === 't' || numExpandedInCol(images, img.dataset.col) > 1 || img.dataset.hidden === 't') {
+          img.dataset.hidden = img.dataset.hidden === 'f' ? 't' : 'f';
+        }
+
+        if (img.dataset.hidden === 't') {
+          contentDiv.style.display = 'none';
+          img.parentElement.parentElement.style.flexGrow = 0;
+        } else if (img.dataset.hidden === 'f') {
+          contentDiv.style.display = 'flex';
+          img.parentElement.parentElement.style.flexGrow = 1;
+        }
+
+        images.forEach(i => {
+          i.style.cursor = 'default';
+          if (i.dataset.hidden === 'f' && numExpandedInCol(images, img.dataset.col) === 1 && img.dataset.ignore !== 't') {
+            i.style.cursor = 'not-allowed';
+          }
+        });
+      });
+    }
   }
   
   getElement(selector) {
@@ -475,6 +508,7 @@ class HydraController extends EventTarget {
         }
       }
     });
+
     view.canvas.addEventListener('mousedown', ({which}) => {
       this.clickStart = performance.now();
       if (which === 1)
@@ -482,6 +516,7 @@ class HydraController extends EventTarget {
       else if (which === 2)
         this.scrollDown = true;
     });
+    
     view.canvas.addEventListener('mouseleave', () => this.mouseDown = this.scrollDown = false);
     view.canvas.addEventListener('mouseup', ({which}) => {
       this.clickEnd = performance.now();
@@ -549,22 +584,25 @@ class HydraController extends EventTarget {
         this.mode = HydraController.Mode.TRACE;
       });
     } else {
-      this.view.pause.disabled = true;
+      // this.view.pause.disabled = true;
       this.reset();
       this.mode = HydraController.Mode.RASTER;
     }
   }
   
   togglePaused() {
+    this.model.resetStartTime();
     this.paused = !this.paused;
     if (this.paused) {
       window.cancelAnimationFrame(this.lastFrameId);
       this.view.pauseLabel.style = '';
       this.view.unpauseLabel.style = 'font-weight: bold;';
+      this.view.pause.value = 'Unpause';
     } else {
       window.requestAnimationFrame(this.render);
       this.view.pauseLabel.style = 'font-weight: bold;';
       this.view.unpauseLabel.style = '';
+      this.view.pause.value = 'Pause';
     }
     
     if (this.mode === HydraController.Mode.TRACE || this.mode === HydraController.Mode.RASTER) {
@@ -605,6 +643,7 @@ class HydraController extends EventTarget {
         this.frameGraph.execute('rtx');
         
         this.view.sampleCount.textContent = this.model.sampleCount;
+        this.view.fps.textContent = this.model.fps.toFixed(0);
         
         if (this.snapshotSampleFactor > 1 && this.model.sampleCount === this.snapshotSampleThreshold) {
           if (!this.mouseDown && !this.wheeling && !this.scrollDown) {

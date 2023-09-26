@@ -90,6 +90,8 @@ export class HydraModel extends EventTarget {
   
   // misc.
   sampleCount = 0;
+  #sampleOffset = 0;
+  #startTime = 0;
   
   orbitalControls = new OrbitalCamera(.01, .95, 50, .002);
   editorCamera = new CameraNode({camera: {
@@ -105,6 +107,9 @@ export class HydraModel extends EventTarget {
   preferEditorCam = false;
   cachedTlas = null;
 
+  get fps() {
+    return 1000 * (this.sampleCount - this.#sampleOffset) / (performance.now() - this.#startTime);
+  } 
 
   pick(u, v) {
     const ray = Ray.generate(u, v, this.editorCamera.projectionMatrix, this.editorCamera.viewMatrix);
@@ -135,11 +140,11 @@ export class HydraModel extends EventTarget {
 `Vendor: ${this.gl.getParameter(debugExt.UNMASKED_VENDOR_WEBGL)}
 Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     );
-    DisplayConsole.getDefault().log(
+    /*DisplayConsole.getDefault().log(
 `Optimizing WebGL2/WebGPU Performance (Windows):
  * WebGL2: Select OpenGL driver for ANGLE backend
  * WebGPU: Select Default/D3D driver for ANGLE backend`,
-    'info');
+    'info');*/
   }
 
   triggerDebug() {
@@ -792,7 +797,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
           gl.drawArrays(gl.TRIANGLES, 0, 3);
         }
       }
-      
+
       this.sampleCount++;
     });
     
@@ -1004,12 +1009,18 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     const main = this.shaderLib.getShader('raytrace-main');
     main.uniforms.set('u_accelStruct.size', [size, size]);
   }
+
+  resetStartTime() {
+    this.#startTime = performance.now();
+    this.#sampleOffset = this.sampleCount;
+  }
   
   reset() {
     const gl = this.gl;
     
     // zero sample count
     this.sampleCount = 0;
+    this.resetStartTime();
     
     // clear accumulation buffer
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fg.getFramebuffer('rtx', 'rtx-pass'));

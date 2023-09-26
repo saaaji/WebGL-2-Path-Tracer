@@ -70,10 +70,9 @@ void main() {
     finalColor = vec3(v_uv, 0);
   }
 #endif
-  
+
+  finalColor = any(lessThan(u_visColor.rgb, vec3(1))) ? vec3(1) : finalColor;
   vec3 albedo = finalColor * u_visColor.rgb * (AMBIENT + abs(dot(normal, -DIR)));
-  
-  // albedo = vec3(v_uv, 0);
 
   out_albedo = vec4(min(albedo + specular, vec3(1)), 1);
   out_normal = vec4(0.5 * (normal + 1.0), 1);

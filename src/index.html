@@ -94,7 +94,7 @@
               <input id='save' type='image' width='20' height='20' title='Download' src='./assets/images/download.png'/>
             </div>-->
             <div id='key-bindings' class='hidden'>
-              <p>Samples: <span id='sample-count'>0</span></p>
+              <p>Samples: <span id='sample-count'>0</span> (FPS: <span style='color:#66FF99;font-weight:bold;' id='fps'>0</span>)</p>
               <p>[t] toggle key bindings</p>
               <p>[p] <span id='p' style='font-weight: bold;'>pause</span>/<span id='u'>unpause</span></p>
               <p>[r] toggle render mode</p>
@@ -108,7 +108,10 @@
           </div>
         </div>
         <div class='ui-section' id='console-container'>
-          <div class='ui-section-title'>Console</div>
+          <div class='ui-section-title'>
+            Console
+            <img title='toggle' data-for='console-output-container' data-col='1' data-ignore='t' class='section-toggle' width=16 src='./assets/images/branch.png'>
+          </div>
           <div class='ui-section-content empty' id='console-output-container'>
             No Messages
             <!-- Example Message Formatting:
@@ -122,19 +125,28 @@
       </div>
       <div class='ui-column'>
         <div class='ui-section' id='node-tree-container'>
-          <div class='ui-section-title'>Node Tree</div>
+          <div class='ui-section-title'>
+            Node Tree
+            <!-- <img title='toggle' data-for='tree-viewer-container' data-col='2' class='section-toggle' width=16 src='./assets/images/branch.png'> -->
+          </div>
           <div class='ui-section-content' id='tree-viewer-container'>
             <tree-viewer id='tree-viewer'></tree-viewer>
           </div>
         </div>
         <div class='ui-section' id='active-node'>
-          <div class='ui-section-title'>Active Node</div>
+          <div class='ui-section-title'>
+            Active Node
+            <img title='toggle' data-for='node-1' data-col='2' class='section-toggle' width=16 src='./assets/images/branch.png'>
+          </div>
           <div class='ui-section-content active-node-container empty' id='node-1'>
             No Selection
           </div>
         </div>
         <div class='ui-section' id='active-node-2'>
-          <div class='ui-section-title'>Application Data</div>
+          <div class='ui-section-title'>
+            Application Data
+            <img title='toggle' data-for='node-2' data-col='2' class='section-toggle' width=16 src='./assets/images/branch.png'>
+          </div>
           <div class='ui-section-content active-node-container empty' id='node-2'>
             No Selection
           </div>

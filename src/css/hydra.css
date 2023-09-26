@@ -61,6 +61,13 @@ html, body {
 .ui-section-title {
   padding: 0.2em;
   font-weight: bold;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.ui-section-title img {
+  padding: 0 0 0 0.2em;
 }
 
 .ui-section-content {
@@ -375,7 +382,7 @@ html, body {
 
 /* Scene Graph (Node Tree) */
 #node-tree-container {
-  min-height: 10%;
+  /* min-height: 10%; */
   max-height: 40%;
   overflow: scroll;
 }
