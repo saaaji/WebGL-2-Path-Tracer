@@ -61,6 +61,8 @@ export class BinaryBVH {
     let tMin = Infinity;
     let primitive = null;
     const stack = [this];
+
+    let l = 0;
     
     while (stack.length > 0) {
       const node = stack.pop();

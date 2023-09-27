@@ -1,6 +1,6 @@
 import { SourceCache, ShaderLib } from './utilities/shaders.js';
 import { DisplayConsole } from './utilities/Console.js';
-import { EventTarget, UboBuilder, bufferToImage, canvasToBlob, loadImage } from './utilities/util.js';
+import { EventTarget, UboBuilder, bufferToImage, canvasToBlob, loadImage, closestHitGLSLMirror } from './utilities/util.js';
 import { SceneGraphNode, CameraNode } from './utilities/SceneGraphNode.js';
 import { FrameGraph } from './utilities/RenderGraph.js';
 import { decodeHydra } from './loading/hydra.js';
@@ -114,7 +114,17 @@ export class HydraModel extends EventTarget {
   pick(u, v) {
     const ray = Ray.generate(u, v, this.editorCamera.projectionMatrix, this.editorCamera.viewMatrix);
 
-    return this.cachedTlas?.intersect(ray);
+    if (this._cachedBvhBuffer) {
+      const [, mesh] = closestHitGLSLMirror(
+        this._cachedBvhBuffer.pixels,
+        this._cachedBvhBuffer.blasDescriptors,
+        this._faceData,
+        this._vertexData,
+        ray,
+      );
+      
+      return mesh;
+    }
   }
 
   constructor(gl) {
@@ -369,7 +379,9 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
 
         switch (name) {
           case 'FACE':
-            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, dataTexBuffer.slice(offset), gl.STATIC_DRAW);
+            const data = dataTexBuffer.slice(offset)
+            this._faceData = new Int32Array(data);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, data, gl.STATIC_DRAW);
             break;
           case 'MATERIAL':
             var location = gBufferShader.attribs.get('a_MATERIAL');
@@ -377,6 +389,9 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
             gl.enableVertexAttribArray(location);
             break;
           case 'VERTEX':
+            this._vertexData = new Float32Array(
+              dataTexBuffer.slice(offset, offset + numComponents * width * height * TYPE_TO_SIZE[type])
+            );
           case 'NORMAL':
           case 'TEXCOORD':
             var location = gBufferShader.attribs.get(`a_${name}`);
@@ -945,10 +960,11 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     displayConsole.timeEnd('TLAS Build', 'cpu');
 
     this.cachedTlas = tlas;
-    
+
     // array of BVH data (tlas always in 0th position)
     const texData = [tlas._serialize()];
     const builder = new UboBuilder(32 * 16 * 9);
+    const blasDescriptors = [];
     
     /**
      * Build BlasDescriptors buffer
@@ -983,6 +999,13 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       
       texData.push(this.asset.getBufferView(bufferView));
       builder.pushInts(texelOffset);
+
+      blasDescriptors.push({
+        reference: node,
+        worldMatrix,
+        inverseWorldMatrix,
+        offset: byteOffset / Float32Array.BYTES_PER_ELEMENT,
+      });
     });
     
     // update texture data
@@ -1005,6 +1028,11 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     gl.bufferSubData(gl.UNIFORM_BUFFER, 0, builder.rawBuffer);
     gl.bindBuffer(gl.UNIFORM_BUFFER, null);
     displayConsole.timeEnd('BlasDescriptors Upload', 'gpu');
+
+    this._cachedBvhBuffer = {
+      pixels: new Float32Array(buffer),
+      blasDescriptors,
+    };
     
     const main = this.shaderLib.getShader('raytrace-main');
     main.uniforms.set('u_accelStruct.size', [size, size]);
