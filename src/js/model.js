@@ -1,6 +1,8 @@
 import { SourceCache, ShaderLib } from './utilities/shaders.js';
 import { DisplayConsole } from './utilities/Console.js';
-import { EventTarget, UboBuilder, bufferToImage, canvasToBlob, loadImage, closestHitGLSLMirror } from './utilities/util.js';
+import { EventTarget, bufferToImage, canvasToBlob, loadImage } from './utilities/util.js';
+import { SequentialUboBuilder } from './utilities/gpu_utils/ubuffers.js';
+import { closestHit_GlslMirror } from './utilities/gpu_utils/shader_mirrors.js';
 import { SceneGraphNode, CameraNode } from './utilities/SceneGraphNode.js';
 import { FrameGraph } from './utilities/RenderGraph.js';
 import { decodeHydra } from './loading/hydra.js';
@@ -115,7 +117,7 @@ export class HydraModel extends EventTarget {
     const ray = Ray.generate(u, v, this.editorCamera.projectionMatrix, this.editorCamera.viewMatrix);
 
     if (this._cachedBvhBuffer) {
-      const [, mesh] = closestHitGLSLMirror(
+      const [, mesh] = closestHit_GlslMirror(
         this._cachedBvhBuffer.pixels,
         this._cachedBvhBuffer.blasDescriptors,
         this._faceData,
@@ -963,7 +965,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
 
     // array of BVH data (tlas always in 0th position)
     const texData = [tlas._serialize()];
-    const builder = new UboBuilder(32 * 16 * 9);
+    const builder = new SequentialUboBuilder(32 * 16 * 9);
     const blasDescriptors = [];
     
     /**

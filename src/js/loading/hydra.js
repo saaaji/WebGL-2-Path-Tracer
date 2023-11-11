@@ -2,7 +2,8 @@ import { GlbLoader } from './GlbLoader.js';
 import { Triangle } from '../utilities/primitives.js';
 import { BinaryBVH } from '../accel/BVHNode.js';
 import { TextureAtlasBuilder } from '../utilities/TextureAtlasBuilder.js';
-import { GL_CTX, UboBuilder, assert, createEnum } from '../utilities/util.js';
+import { GL_CTX, assert, createEnum } from '../utilities/util.js';
+import { SequentialUboBuilder } from '../utilities/gpu_utils/ubuffers.js';
 
 const hex = n => '0x' + n.toString(16).toUpperCase();
 

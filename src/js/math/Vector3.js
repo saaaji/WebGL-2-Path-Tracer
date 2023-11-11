@@ -1,11 +1,21 @@
 import { ActiveNodeEditor } from '../utilities/ActiveNodeEditor.js';
 
 export class Vector3 {
+  #halfFlag = false;
+
   constructor(x = 0, y = 0, z = 0) {
     this._x = x;
     this._y = y;
     this._z = z;
     this.onchange = function(){};
+  }
+
+  setHalfFlag(flag) {
+    this.#halfFlag = flag;
+  }
+
+  get isHalf() {
+    return this.#halfFlag;
   }
   
   setFromArray(array, offset = 0) {
@@ -20,6 +30,10 @@ export class Vector3 {
   
   get isVector() {
     return true;
+  }
+
+  get length() {
+    return 3;
   }
   
   get [0]() {
