@@ -59,23 +59,15 @@ export class Quaternion {
     return this.multiplyQuaternions(q, this);
   }
   
-  multiplyQuaternions(q, p) {
-    
-    const qx = q.x,
-          qy = q.y,
-          qz = q.z,
-          qw = q.w;
-    
-    const px = p.x,
-          py = p.y,
-          pz = p.z,
-          pw = p.w;
-    
-    this._x = qw * px + pw * qx + qy * pz - py * qz;
-    this._y = qw * qy + pw * qy + qz * px - pz * qz;
-    this._z = qw * pz + pw * qz + qx * py - px * qy;
-    this._w = qw * pw - qx * px - qy * py - qz * pz;
-    
+  multiplyQuaternions(a, b) {
+    const qax = a._x, qay = a._y, qaz = a._z, qaw = a._w;
+		const qbx = b._x, qby = b._y, qbz = b._z, qbw = b._w;
+
+		this._x = qax * qbw + qaw * qbx + qay * qbz - qaz * qby;
+		this._y = qay * qbw + qaw * qby + qaz * qbx - qax * qbz;
+		this._z = qaz * qbw + qaw * qbz + qax * qby - qay * qbx;
+		this._w = qaw * qbw - qax * qbx - qay * qby - qaz * qbz;
+
     this.onchange?.();
     
     return this;
@@ -182,6 +174,9 @@ export class Quaternion {
    );
   }
   
+  get inverse() {
+    return this.conjugate;
+  }
 }
 
 ['x', 'y', 'z', 'w'].forEach(publicName => {

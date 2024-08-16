@@ -1,6 +1,6 @@
 import { SourceCache, ShaderLib } from './utilities/shaders.js';
 import { DisplayConsole } from './utilities/Console.js';
-import { EventTarget, bufferToImage, canvasToBlob, loadImage } from './utilities/util.js';
+import { EventTarget, bufferToImage, canvasToBlob, loadImage, clamp } from './utilities/util.js';
 import { SequentialUboBuilder } from './utilities/gpu_utils/ubuffers.js';
 import { closestHit_GlslMirror } from './utilities/gpu_utils/shader_mirrors.js';
 import { SceneGraphNode, CameraNode } from './utilities/SceneGraphNode.js';
@@ -11,6 +11,8 @@ import { BinaryBVH } from './accel/BVHNode.js';
 import { HdrLoader, computeHdrSamplingDistributions } from './loading/HdrLoader.js';
 import { OrbitalCamera } from './utilities/OrbitCamera.js';
 import { Matrix4 } from './math/Matrix4.js';
+import { Vector3 } from './math/Vector3.js';
+import { Quaternion } from './math/Quaternion.js';
 import { ActiveNodeEditor } from './utilities/ActiveNodeEditor.js';
 import { Ray } from './math/Ray.js';
 import {
@@ -21,6 +23,9 @@ import {
   EDITOR_COLOR_SCHEME,
   TYPE_TO_SIZE,
 } from './utilities/constants.js';
+
+window.Quaternion = Quaternion;
+window.Vector3 = Vector3;
 
 // preview config
 export const PREVIEW_DEFAULT_WIDTH = 512; // use aspect ratio to find height
@@ -69,6 +74,8 @@ export class HydraModel extends EventTarget {
     'cameraFrag.glsl',
     'gradient.glsl',
     'tex.glsl',
+    'axesVert.glsl',
+    'axesFrag.glsl',
   ];
   
   static PROGRAM_INFO = {
@@ -78,6 +85,7 @@ export class HydraModel extends EventTarget {
     'composite': ['fullscreenTri.glsl', 'composite.glsl'],
     'ssaa': ['fullscreenTri.glsl', 'SSAA.glsl'],
     'camera': ['icons.glsl', 'cameraFrag.glsl'],
+    'axes': ['axesVert.glsl', 'axesFrag.glsl'],
     'raytrace-main': ['fullscreenTri.glsl', 'main.glsl'],
     'raytrace-tonemap': ['fullscreenTri.glsl', 'sampleTex.glsl'],
     'copy': ['fullscreenTri.glsl', 'copy.glsl'],
@@ -103,6 +111,7 @@ export class HydraModel extends EventTarget {
 
   focusedNode = null;
   focusedNodes = null;
+  focusedAxis = -1;
 
   debugIndex = 0;
   emissiveFactor = 1;
@@ -126,6 +135,49 @@ export class HydraModel extends EventTarget {
       );
       
       return mesh;
+    }
+  }
+
+  grab(u0, v0, u1, v1, axis, rotate = false) {
+    const startRay = Ray.generate(u0, v0, this.editorCamera.projectionMatrix, this.editorCamera.viewMatrix);
+    const endRay = Ray.generate(u1, v1, this.editorCamera.projectionMatrix, this.editorCamera.viewMatrix);
+    const point = this.focusedNode.worldMatrix.columnVector(3);
+    const normal = this.focusedNode.worldMatrix.columnVector(axis).normalize();
+
+    const [, t0] = startRay.intersectsPlane(point, normal); 
+    const [, t1] = endRay.intersectsPlane(point, normal);
+
+    const x1 = endRay.at(t1);
+    const x0 = startRay.at(t0);
+
+    x1.subVectors(x1, point);
+    x0.subVectors(x0, point);
+
+    if (!rotate) {
+      const diff = x1.clone();
+      diff.subVectors(diff, x0);
+
+      if (this.focusedNode.parent) {
+        /*
+        suppose we want pos_w + diff:
+
+        pos_w' = pos_w + diff = W * pos_l + diff
+                              = W * (pos_l + W^-1 * diff)
+        
+        thus we add W^-1 * diff, where W is the world matrix but we don't
+        want to apply local transformations, nor translations or scales
+        (hence parent quaternion inverse)
+        */
+        diff.applyQuaternion(this.focusedNode.parent.worldQuat.inverse, 0);
+      }
+
+      this.focusedNode.position.addVectors(this.focusedNode.position, diff);
+    } else {
+      const theta = x1.angleBetween(x0);
+      const direction = x0.crossVectors(x0, x1).dot(normal);
+      const quat = new Quaternion().setFromAxisAngle(Vector3.axis(axis), Math.sign(direction) * theta);
+      
+      this.focusedNode.quat.multiply(quat);
     }
   }
 
@@ -509,6 +561,34 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
       gl.vertexAttribPointer(cameraShader.attribs.get('a_position'), 3, gl.FLOAT, false, 0, 0);
       gl.enableVertexAttribArray(cameraShader.attribs.get('a_position'));
     });
+
+    this.fg.createVertexArray('axes', (gl, vertexArray) => {
+      const axesShader = this.shaderLib.getShader('axes');
+
+      gl.bindVertexArray(vertexArray);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.fg.createBuffer('axes-vertices-color'));
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        0, 0, 0,
+        1, 0, 0,
+        0, 0, 0,
+        0, 1, 0,
+        0, 0, 0,
+        0, 0, 1,
+
+        1, 0, 0,
+        1, 0, 0,
+        0, 1, 0,
+        0, 1, 0,
+        0, 0, 1,
+        0, 0, 1,
+      ]), gl.STATIC_DRAW);
+
+      gl.vertexAttribPointer(axesShader.attribs.get('a_position'), 3, gl.FLOAT, false, 0, 0);
+      gl.vertexAttribPointer(axesShader.attribs.get('a_color'), 3, gl.FLOAT, false, 0, 18 * Float32Array.BYTES_PER_ELEMENT);
+
+      gl.enableVertexAttribArray(axesShader.attribs.get('a_position'));
+      gl.enableVertexAttribArray(axesShader.attribs.get('a_color'));
+    });
     
     this.fg.createVertexArray('camera-focal-plane', (gl, vertexArray) => {
       const cameraShader = this.shaderLib.getShader('camera');
@@ -625,25 +705,44 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     const fixPass = this.fg.addPass('preview-mode', 'fix-pass', (gl, vertexArrays, textureBindings) => {
       const cameraShader = this.shaderLib.getShader('camera');
       
-      // set pipeline state
-      gl.viewport(0, 0, previewWidth, previewHeight);
-      gl.enable(gl.DEPTH_TEST);
-      gl.enable(gl.BLEND);
-      gl.depthFunc(gl.LEQUAL);
-      
-      const [minWidth, maxWidth] = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE);
-      gl.lineWidth(maxWidth);
-      
-      const blendParams = [
-        [0, gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA],
-        [1, gl.DST_ALPHA, gl.ONE_MINUS_DST_ALPHA],
-      ];
-      
       const drawNth = n => {
         const a = new Array(2).fill(gl.NONE);
         a[n] = gl.COLOR_ATTACHMENT0 + n;
         return a;
       }
+
+      // set pipeline state
+      gl.viewport(0, 0, previewWidth, previewHeight);
+      gl.disable(gl.DEPTH_TEST);
+      gl.disable(gl.BLEND);
+
+      // use OpenGL backend?
+      const [minWidth, maxWidth] = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE);
+      gl.lineWidth(Math.max(minWidth, 5));
+
+      if (this.focusedNode) {
+        const axesShader = this.shaderLib.getShader('axes');
+        axesShader.uniforms.set('u_projectionMatrix', this.editorCamera.projectionMatrix);
+        axesShader.uniforms.set('u_viewMatrix', this.editorCamera.viewMatrix);
+        axesShader.uniforms.set('u_worldMatrix', this.focusedNode.worldMatrix);
+        axesShader.uniforms.set('u_axis', this.focusedAxis);
+        axesShader.bind(gl);
+
+        gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+        gl.bindVertexArray(vertexArrays.get('axes'));
+        gl.drawArrays(gl.LINES, 0, 6);
+      }
+      
+      gl.enable(gl.DEPTH_TEST);
+      gl.enable(gl.BLEND);
+      gl.depthFunc(gl.LEQUAL);
+
+      const blendParams = [
+        [0, gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA],
+        [1, gl.DST_ALPHA, gl.ONE_MINUS_DST_ALPHA],
+      ];
+      
+      
       
       const cameras = this
         .sceneGraph
@@ -942,7 +1041,7 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     }
   }
   
-  async uploadTlas() {
+  async uploadTlas(trace = true) {
     const displayConsole = DisplayConsole.getDefault();
     const gl = this.gl;
     const [json, binary] = this.asset;
@@ -957,9 +1056,9 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     // build top-level hierarchy
     const primitives = meshes.map((mesh, i) => new MeshBlas(mesh, i));
 
-    displayConsole.time();
+    if (trace) displayConsole.time();
     const tlas = new BinaryBVH(primitives, BinaryBVH.SplitMethod.SAH);
-    displayConsole.timeEnd('TLAS Build', 'cpu');
+    if (trace) displayConsole.timeEnd('TLAS Build', 'cpu');
 
     this.cachedTlas = tlas;
 
@@ -1012,32 +1111,35 @@ Renderer: ${this.gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL)}`
     
     // update texture data
     const buffer = await new Blob(texData).arrayBuffer();
-    const length = buffer.byteLength / SIZEOF_RGBA32F_TEXEL;
-    const size = Math.ceil(Math.sqrt(length));
-    const pixels = new Float32Array(size ** 2 * 4);
     
-    pixels.set(new Float32Array(buffer));
-    
-    displayConsole.time();
-    gl.bindTexture(gl.TEXTURE_2D, this.fg.getTexture('bvh'));
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, size, size, 0, gl.RGBA, gl.FLOAT, pixels);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    displayConsole.timeEnd('TLAS Upload', 'gpu');
-    
-    // update BLAS descriptors to reflect changes in top-level hierarchy
-    displayConsole.time();
-    gl.bindBuffer(gl.UNIFORM_BUFFER, this.fg.getBuffer('BlasDescriptors'));
-    gl.bufferSubData(gl.UNIFORM_BUFFER, 0, builder.rawBuffer);
-    gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-    displayConsole.timeEnd('BlasDescriptors Upload', 'gpu');
+    if (trace) {
+      const length = buffer.byteLength / SIZEOF_RGBA32F_TEXEL;
+      const size = Math.ceil(Math.sqrt(length));
+      const pixels = new Float32Array(size ** 2 * 4);
+      
+      pixels.set(new Float32Array(buffer));
+      
+      displayConsole.time();
+      gl.bindTexture(gl.TEXTURE_2D, this.fg.getTexture('bvh'));
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, size, size, 0, gl.RGBA, gl.FLOAT, pixels);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      displayConsole.timeEnd('TLAS Upload', 'gpu');
+      
+      // update BLAS descriptors to reflect changes in top-level hierarchy
+      displayConsole.time();
+      gl.bindBuffer(gl.UNIFORM_BUFFER, this.fg.getBuffer('BlasDescriptors'));
+      gl.bufferSubData(gl.UNIFORM_BUFFER, 0, builder.rawBuffer);
+      gl.bindBuffer(gl.UNIFORM_BUFFER, null);
+      displayConsole.timeEnd('BlasDescriptors Upload', 'gpu');
+
+      const main = this.shaderLib.getShader('raytrace-main');
+      main.uniforms.set('u_accelStruct.size', [size, size]);
+    }
 
     this._cachedBvhBuffer = {
       pixels: new Float32Array(buffer),
       blasDescriptors,
     };
-    
-    const main = this.shaderLib.getShader('raytrace-main');
-    main.uniforms.set('u_accelStruct.size', [size, size]);
   }
 
   resetStartTime() {

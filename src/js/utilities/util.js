@@ -81,6 +81,13 @@ export function chunkArray(a, size) {
   return dst;
 }
 
+export function generateUv(canvas, clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const u = (clientX - rect.left) / canvas.width;
+  const v = (rect.bottom - clientY) / canvas.height;
+  return [u, v];
+}
+
 export class EventTarget {
   #listeners = new Map();
   

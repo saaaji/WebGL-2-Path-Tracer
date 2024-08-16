@@ -4,7 +4,7 @@ import { ActiveNodeEditor } from './utilities/ActiveNodeEditor.js';
 import { HydraModel } from './model.js';
 import { encodeHydra } from './loading/hydra.js';
 import { SHADER_DEFINES } from './utilities/constants.js';
-import { assert, jsonToBlob, blobToImage } from './utilities/util.js';
+import { assert, jsonToBlob, blobToImage, generateUv } from './utilities/util.js';
 import { FrameGraph } from './utilities/RenderGraph.js';
 import { Fits, Node, Histogram } from './plugin/fits/fits.js';
 
@@ -177,8 +177,15 @@ class HydraController extends EventTarget {
         case 'hydra':
           this.mode = HydraController.Mode.RASTER;
           
-          keyBindingsDown = (function({key}) {
+          keyBindingsDown = (function(event) {
+            const {key, shiftKey, altKey, ctrlKey} = event;
             this.keyMap[key] = true;
+
+            // this.keyMap.shiftKey = shiftKey;
+            // this.keyMap.altKey = altKey;
+            // this.keyMap.ctrlKey = ctrlKey;
+
+            // if (this.keyMap.Shift || this.keyMap.Control || this.keyMap.Alt) return;
 
             switch (key) {
               case 'p':
@@ -207,13 +214,30 @@ class HydraController extends EventTarget {
               case 't':
                 view.keyBindings.classList.remove('hidden');
                 break;
+              case 'q':
+              case 'w':
+              case 'e':
+                model.focusedAxis = ({'q': 0, 'w': 1, 'e': 2})[key];
+                if (altKey) event.preventDefault();
+                break;
             }
           }).bind(this);
           
-          keyBindingsUp = (function({key}) {
+          keyBindingsUp = (function({key, shiftKey, altKey, ctrlKey}) {
+            // this.keyMap.shiftKey = shiftKey;
+            // this.keyMap.altKey = altKey;
+            // this.keyMap.ctrlKey = ctrlKey;
+
+            // if (this.keyMap.Shift || this.keyMap.Control || this.keyMap.Alt) return;
+
             switch (key) {
               case 't':
                 view.keyBindings.classList.add('hidden');
+                break;
+              case 'q':
+              case 'w':
+              case 'e':
+                model.focusedAxis = -1;
                 break;
             }
           }).bind(this);
@@ -227,6 +251,9 @@ class HydraController extends EventTarget {
           // updating scene graph
           model.addEventListener('hydra_update_scene_graph', sceneGraph => {
             view.nodeTree.tree = sceneGraph;
+            model.focusedNode = view.nodeEditor.activeNode = null;
+            model.focusedNodes = [];
+            model.focusedAxis = -1;
           });
           
           view.nodeTree.addEventListener('change', ({target}) => {
@@ -235,8 +262,8 @@ class HydraController extends EventTarget {
           });
           
           view.nodeEditor.updateCallback = () => {
-            if (this.mode === HydraController.Mode.TRACE) {
-              model.uploadTlas().then(() => {
+            if (true /*this.mode === HydraController.Mode.TRACE*/) {
+              model.uploadTlas(this.mode === HydraController.Mode.TRACE).then(() => {
                 this.reset();
               });
             }
@@ -526,7 +553,22 @@ class HydraController extends EventTarget {
         this.scrollDown = false;
     });
 
-    view.canvas.addEventListener('mousemove', ({movementX: dx, movementY: dy, offsetX: x, offsetY: y}) => {
+    view.canvas.addEventListener('mousemove', ({target, movementX: dx, movementY: dy, clientX, clientY}) => {
+      if (!this.paused && (this.keyMap.q || this.keyMap.w || this.keyMap.e) &&
+          this.mouseDown &&
+          this.mode === HydraController.Mode.RASTER && view.nodeEditor.activeNode) {
+        
+        let axis = 0;
+        if (this.keyMap.w) axis = 1;
+        else if (this.keyMap.e) axis = 2;
+
+        const [u0, v0] = generateUv(target, clientX, clientY);
+        const [u1, v1] = generateUv(target, clientX + dx, clientY + dy);
+
+        model.grab(u0, v0, u1, v1, axis, this.keyMap.Alt);
+        return;
+      }
+
       if (!this.paused && (this.keyMap['g'] || this.mouseDown) && 
           (this.mode === HydraController.Mode.RASTER || this.mode === HydraController.Mode.TRACE && model.preferEditorCam)) {
         model.orbitalControls.pan(dx, dy);

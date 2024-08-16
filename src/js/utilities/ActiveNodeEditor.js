@@ -1,22 +1,42 @@
 import { lowQualityId, enumerate } from "./util.js";
 
 export class ActiveNodeEditor {
-  static #DEFAULT_INSTANCE = new ActiveNodeEditor(document.querySelector('#node-1'));
-  
   static editableProperties = Symbol('editableProperties');
   static createCustomDOM = Symbol('createCustomDOM');
   static bubbleBottom = Symbol('bubbleBottom');
+
+  static #instances = [];
+  static #cache = new WeakMap();
+  
+  static #DEFAULT_INSTANCE = new ActiveNodeEditor(document.querySelector('#node-1'));
   
   static getDefault() {
     return ActiveNodeEditor.#DEFAULT_INSTANCE;
   }
+
+  static #formatPropClass(node, prop, index = null) {
+    if (!this.#cache.has(node)) this.#cache.set(node, lowQualityId());
+    const indexPostfix = typeof index === 'number' ? `[${index}]` : '';
+    
+    return `[${this.#cache.get(node)}][${prop}]${indexPostfix}`;
+  }
   
+  static retrieveContext(node, prop, index = null) {
+    const inputs = [...document.getElementsByClassName(this.#formatPropClass(node, prop, index))];
+    const callbacks = this.#instances.filter(instance => instance.#activeNode === node).map(instance => instance.updateCallback);
+
+    return [inputs, callbacks];
+  }
+
   #container;
   #id = lowQualityId();
-  
+  #activeNode = null;
+
   constructor(container, updateCallback = () => {}) {
     this.#container = container;
     this.updateCallback = updateCallback;
+
+    ActiveNodeEditor.#instances.push(this);
   }
   
   #getProp(node, prop) {
@@ -45,6 +65,10 @@ export class ActiveNodeEditor {
     return `ANE_${this.#id}_${prop.replaceAll('.', '_')}`;
   }
 
+  get activeNode() {
+    return this.#activeNode;
+  }
+
   /**
    * <div class='ui-content-row'>
    *   <label for=...>...</label>
@@ -52,6 +76,8 @@ export class ActiveNodeEditor {
    * </div>
    */
   set activeNode(node) {
+    this.#activeNode = node;
+
     while (this.#container.firstChild) {
       this.#container.removeChild(this.#container.firstChild);
     }
@@ -85,7 +111,11 @@ export class ActiveNodeEditor {
 
               row.querySelector('input')?.setAttribute(
                 'id', 
-                this.#genPropId(prop)+`_p${index}`,
+                this.#genPropId(prop)+`_i${index}`,
+              );
+
+              row.querySelector('input')?.classList.add(
+                ActiveNodeEditor.#formatPropClass(node, prop, index),
               );
             }
           }
@@ -97,7 +127,8 @@ export class ActiveNodeEditor {
           const input = document.createElement('input');
 
           input.setAttribute('id', this.#genPropId(prop));
-          
+          input.classList.add(ActiveNodeEditor.#formatPropClass(node, prop));
+
           label.textContent = displayName;
           if (mono) {
             label.classList.add('mono');
