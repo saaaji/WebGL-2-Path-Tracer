@@ -52,20 +52,52 @@ export class SceneGraphNode extends Node {
   
   static [onPositionChange] = function() {
     this.update();
+
+    // input changing programmatically doesn't trigger change event  
+    for (let i = 0; i < 3; i++) {
+      const [inputs, callbacks] = ActiveNodeEditor.retrieveContext(this, 'position', i);
+      inputs.forEach(el => el.value = this.position[i]);
+      if (i == 2)
+        callbacks.forEach(callback => callback?.());
+    }
   }
   
   static [onScaleChange] = function() {
     this.update();
+
+    // input changing programmatically doesn't trigger change event  
+    for (let i = 0; i < 3; i++) {
+      const [inputs, callbacks] = ActiveNodeEditor.retrieveContext(this, 'scale', i);
+      inputs.forEach(el => el.value = this.scale[i]);
+      if (i == 2)
+        callbacks.forEach(callback => callback?.());
+    }
   }
   
   static [onEulerChange] = function() {
     this.#quat.setFromEuler(this.rotation, false);
     this.update();
+
+    // input changing programmatically doesn't trigger change event  
+    for (let i = 0; i < 3; i++) {
+      const [inputs, callbacks] = ActiveNodeEditor.retrieveContext(this, 'rotation', i);
+      inputs.forEach(el => el.value = this.rotation[i]);
+      if (i == 2)
+        callbacks.forEach(callback => callback?.());
+    }
   }
   
   static [onQuaternionChange] = function() {
     this.rotation.setFromQuaternion(this.#quat, false);
     this.update();
+
+    // input changing programmatically doesn't trigger change event  
+    for (let i = 0; i < 3; i++) {
+      const [inputs, callbacks] = ActiveNodeEditor.retrieveContext(this, 'rotation', i);
+      inputs.forEach(el => el.value = this.rotation[i]);
+      if (i == 2)
+        callbacks.forEach(callback => callback?.());
+    }
   }
   
   worldMatrix = new Matrix4();
@@ -76,6 +108,15 @@ export class SceneGraphNode extends Node {
   scale = new Vector3(1, 1, 1);
   
   #quat = new Quaternion();
+  #worldQuat = new Quaternion();
+
+  get quat() {
+    return this.#quat;
+  }
+
+  get worldQuat() {
+    return this.#worldQuat.clone();
+  }
   
   // construct from JSON-friendly descriptor
   constructor({
@@ -97,7 +138,7 @@ export class SceneGraphNode extends Node {
     
     this.matrix.decompose(this.position, this.#quat, this.scale);
     this.rotation.setFromQuaternion(this.#quat, false);
-    
+
     this.position.onchange = this.constructor[onPositionChange].bind(this);
     this.scale.onchange = this.constructor[onScaleChange].bind(this);
     this.rotation.onchange = this.constructor[onEulerChange].bind(this);
@@ -110,8 +151,10 @@ export class SceneGraphNode extends Node {
     
     if (this.parent) {
       this.worldMatrix.multiplyMatrices(this.parent.worldMatrix, this.matrix);
+      this.#worldQuat.multiplyQuaternions(this.parent.#worldQuat, this.#quat);
     } else {
       this.worldMatrix.copy(this.matrix);
+      this.#worldQuat.copy(this.#quat);
     }
     
     this.children.forEach(child => child.update());

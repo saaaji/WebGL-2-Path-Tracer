@@ -1,4 +1,11 @@
 import { ActiveNodeEditor } from '../utilities/ActiveNodeEditor.js';
+import { clamp } from '../utilities/util.js';
+
+const axisMap = {
+  0: [1, 0, 0],
+  1: [0, 1, 0],
+  2: [0, 0, 1],
+};
 
 export class Vector3 {
   #halfFlag = false;
@@ -8,6 +15,10 @@ export class Vector3 {
     this._y = y;
     this._z = z;
     this.onchange = function(){};
+  }
+
+  static axis(index) {
+    return new Vector3().setFromArray(axisMap[index]);
   }
 
   setHalfFlag(flag) {
@@ -230,6 +241,10 @@ export class Vector3 {
     
     return aX * bX + aY * bY + aZ * bZ;
   }
+
+  angleBetween(b) {
+    return Math.acos(clamp(this.dot(b) / (this.length * b.length), -1, +1));
+  }
   
   // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
   setFromQuaternion(q, triggerCallback = true) {
@@ -262,6 +277,24 @@ export class Vector3 {
     }
     
     return this;
+  }
+
+  applyQuaternion(q) {
+		const [vx, vy, vz] = this;
+    const [qx, qy, qz, qw] = q;
+
+		// t = 2 * cross( q.xyz, v );
+		const tx = 2 * ( qy * vz - qz * vy );
+		const ty = 2 * ( qz * vx - qx * vz );
+		const tz = 2 * ( qx * vy - qy * vx );
+
+		// v + q.w * t + cross( q.xyz, t );
+		this._x = vx + qw * tx + qy * tz - qz * ty;
+		this._y = vy + qw * ty + qz * tx - qx * tz;
+		this._z = vz + qw * tz + qx * ty - qy * tx;
+
+    this.onchange?.();
+		return this;
   }
   
   *[Symbol.iterator]() {

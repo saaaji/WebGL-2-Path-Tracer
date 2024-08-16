@@ -58,7 +58,7 @@ export const TYPE_TO_SIZE = {
 
 export const SHADER_DEFINES =
 `#define RUSSIAN_ROULETTE
-#define DOUBLE_SIDED_EMITTERS
+//#define DOUBLE_SIDED_EMITTERS
 #define MSAA
 #define KILL_NANS
 #define INTEGRATOR traceRay

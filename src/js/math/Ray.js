@@ -28,6 +28,12 @@ export class Ray {
     return ray;
   }
 
+  at(t) {
+    const point = this.direction.clone().scale(t);
+    point.addVectors(point, this.origin);
+    return point;
+  }
+
   applyMatrix4(matrix) {
     this.origin.applyMatrix4(matrix, 1, false);
     this.direction.applyMatrix4(matrix, 0, false);
@@ -74,5 +80,13 @@ export class Ray {
     tMax = Math.min(...far);
 
     return [tMin < tMax, tMin];
+  }
+
+  intersectsPlane(point, normal, tMin = Number.EPSILON, tMax = +Infinity) {
+    const diff = point.clone();
+    diff.subVectors(diff, this.origin);
+    const t = diff.dot(normal) / this.direction.dot(normal);
+
+    return [t > tMin && t < tMax, t];
   }
 }

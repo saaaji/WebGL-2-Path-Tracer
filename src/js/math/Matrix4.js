@@ -195,7 +195,7 @@ export class Matrix4 {
 
 		m1.elements[8] *= invZ;
 		m1.elements[9] *= invZ;
-		m1.elements[1] *= invZ;
+		m1.elements[10] *= invZ;
 
 		quaternion.setFromRotationMatrix(m1);
 
