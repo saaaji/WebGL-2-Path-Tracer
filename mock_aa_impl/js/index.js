@@ -10,8 +10,6 @@ async function main() {
   await Promise.all(
     SHADER_SRC.map(file => sourceCache.registerModule(file)));
 
-  console.log(sourceCache);
-
   const canvas = document.getElementById('canvas');
   const adapter = await navigator.gpu?.requestAdapter();
 
@@ -23,9 +21,6 @@ async function main() {
     console.error('WebGPU not supported');
     return;
   }
-
-  console.log(adapter);
-  console.log(device);
 
   const context = canvas.getContext('webgpu');
   const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
@@ -44,21 +39,6 @@ async function main() {
   // const pipeline = device.createComputePipeline({
   //   layout: 'auto',
   //   compute: { module: computeModule },
-  // });
-
-  // const querySet = device.createQuerySet({
-  //   type: 'timestamp',
-  //   count: 2,
-  // });
-
-  // const queryBuffer = device.createBuffer({
-  //   size: 8 * querySet.count,
-  //   usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
-  // });
-
-  // const resultBuffer = device.createBuffer({
-  //   size: queryBuffer.size,
-  //   usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
   // });
 
   // const computePassDescriptor = {
@@ -117,13 +97,17 @@ async function main() {
 //     // window.requestAnimationFrame(render);
 //   }
 
+  // configure canvas dimensions
   const targetWidth = 1280;
   const targetHeight = 720;
+  const workgroupSize = 8;
+
   canvas.width = targetWidth;
   canvas.height = targetHeight;
 
+  // initialize accumulation buffer
   const accBufferDescriptor = {
-    size: [3, 3],
+    size: [targetWidth, targetHeight],
     format: 'rgba32float',
     usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
   };
@@ -133,17 +117,15 @@ async function main() {
     device.createTexture(accBufferDescriptor)];
   let accActiveIndex = 0;
 
+  // zero each buffer
   accBuffer.forEach(buffer => device.queue.writeTexture(
     { texture: buffer },
-    new Float32Array([
-      1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1,
-      0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1,
-      1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1,
-    ]),
+    new Float32Array(targetWidth * targetHeight * 4),
     { bytesPerRow: Float32Array.BYTES_PER_ELEMENT * 4 * buffer.width },
     { width: buffer.width, height: buffer.height },
   ));
 
+  // initialize shader modules and pipelines
   const compModule = device.createShaderModule({
     label: 'comp-module',
     code: sourceCache.fetchModule('comp.wgsl'),
@@ -167,6 +149,23 @@ async function main() {
     fragment: { module: postModule, targets: [{format: presentationFormat}] },
   });
 
+  // initialize timing machinery
+  const querySet = device.createQuerySet({
+    type: 'timestamp',
+    count: 2,
+  });
+
+  const queryBuffer = device.createBuffer({
+    size: 8 * querySet.count,
+    usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
+  });
+
+  const resultBuffer = device.createBuffer({
+    size: queryBuffer.size,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+  });
+
+  // configure pass descriptors
   const postPassDescriptor = {
     label: 'post-process-pass',
     colorAttachments: [{
@@ -176,20 +175,32 @@ async function main() {
     }],
   };
 
+  const compPassDescriptor = {
+    timestampWrites: {
+      querySet,
+      beginningOfPassWriteIndex: 0,
+      endOfPassWriteIndex: 1,
+    },
+  }
+
+  // initialize uniform buffer
   const uniBuffer = device.createBuffer({
-    size: Int32Array.BYTES_PER_ELEMENT,
+    size: Uint32Array.BYTES_PER_ELEMENT + 3 * Uint32Array.BYTES_PER_ELEMENT,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
 
+  // uniform values
   const uni = {
-    samples: 1,
+    samples: 0,
+    imageSize: [targetWidth, targetHeight],
   };
 
+  // rendering loop
   window.requestAnimationFrame(function render() {
     postPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
     const encoder = device.createCommandEncoder({ label: 'render-enc' });
 
-    const uniValues = new Int32Array([uni.samples]);
+    const uniValues = new Uint32Array([uni.samples, uni.imageSize[0], uni.imageSize[1]]);
     device.queue.writeBuffer(uniBuffer, 0, uniValues);
 
     const compBindGroup = device.createBindGroup({
@@ -214,10 +225,13 @@ async function main() {
 
     accActiveIndex = Number(!accActiveIndex);
 
-    const compPass = encoder.beginComputePass();
+    const compPass = encoder.beginComputePass(compPassDescriptor);
     compPass.setPipeline(compPipeline);
     compPass.setBindGroup(0, compBindGroup);
-    compPass.dispatchWorkgroups(3, 3);
+    compPass.dispatchWorkgroups(
+      Math.ceil(targetWidth/workgroupSize), 
+      Math.ceil(targetHeight/workgroupSize),
+      1);
     compPass.end();
 
     const postPass = encoder.beginRenderPass(postPassDescriptor);
@@ -226,8 +240,24 @@ async function main() {
     postPass.draw(3);
     postPass.end();
 
+    // resolve timestamps
+    encoder.resolveQuerySet(querySet, 0, querySet.count, queryBuffer, 0);
+    if (resultBuffer.mapState === 'unmapped')
+      encoder.copyBufferToBuffer(queryBuffer, 0, resultBuffer, 0, resultBuffer.size);
+
     const commandBuffer = encoder.finish();
     device.queue.submit([commandBuffer]);
+
+    // check timestamps
+    if (resultBuffer.mapState === 'unmapped') {
+      resultBuffer.mapAsync(GPUMapMode.READ).then(() => {
+        const  times = new BigInt64Array(resultBuffer.getMappedRange());
+        const gpuNanos = Number(times[1] - times[0]);
+        const gpuMicros = gpuNanos / 1e+6;
+        console.log(`us: ${gpuMicros.toFixed(5)}`);
+        resultBuffer.unmap();
+      });
+    }
 
     uni.samples++;
     window.requestAnimationFrame(render);
@@ -235,26 +265,3 @@ async function main() {
 }
 
 main();
-
-/*
-
-4 compute phases
-
-generate:
-generates primary rays for as many rays as there are pixels.
-output is a large buffer of rays, counter which tells (extend) 
-how many rays need to be processed (for primary: w * h)
-
-extend:
-intersect all rays with the scene.
-intersection results are stored in buffer.
-
-shade:
-evaluate shading model for each path
-may or may not generate new rays (if path terminated)
-
-
-
-connect: not necessary no shadows
-
-*/
