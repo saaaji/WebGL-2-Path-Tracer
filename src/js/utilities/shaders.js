@@ -30,6 +30,9 @@ export class SourceCache {
       
       for (const [directive, moduleName] of source.matchAll(this.constructor.#INCLUDE_REGEX)) {
         source = source.replace(directive, this.#modules.get(moduleName) ?? '');
+        if (!this.#modules.has(moduleName)) {
+          console.warn(`could not locate module '${moduleName}'`);
+        }
       }
       
       return source;

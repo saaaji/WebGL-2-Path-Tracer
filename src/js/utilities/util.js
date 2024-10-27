@@ -66,7 +66,7 @@ export const loadImage = src => new Promise(resolve => {
 
 export function assert(boolean, message = 'assertion failed') {
   if (!boolean) {
-    DisplayConsole.getDefault().fatalError(message);
+    DisplayConsole.getDefault()?.fatalError(message);
     // throw new Error(message);
   }
 }

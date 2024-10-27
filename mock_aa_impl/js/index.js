@@ -1,14 +1,71 @@
-import { SourceCache, ShaderLib } from '../../src/js/utilities/shaders.js';
+import { SourceCache } from '../../src/js/utilities/shaders.js';
+import { OrbitalCamera } from '../../src/js/utilities/OrbitCamera.js';
+import { CameraNode } from '../../src/js/utilities/SceneGraphNode.js';
+import { GlbLoader } from '../../src/js/loading/GlbLoader.js';
+import { BVH } from './utils/BVH.js';
+import { Triangle } from '../../src/js/utilities/primitives.js';
+import { createEnum } from '../../src/js/utilities/util.js';
 
-const SHADER_SRC = ['post.wgsl', 'comp.wgsl'];
+const SHADER_SRC = [
+  'post.wgsl', 
+  'comp.wgsl', 
+  'ray_util.wgsl',
+  'bvh_util.wgsl',
+  'rand.wgsl',
+];
+const ALGOS = createEnum(
+  'BVH_DF',
+);
 
-async function main() {
+document.getElementById('benchmark').addEventListener('click', async event => {
+  const model = document.getElementById('model');
+  const algoSelect = document.getElementById('algo');
+  const algo = algoSelect.options[algoSelect.selectedIndex].value;
+  
+  if (model.files.length > 0) {
+    const {target} = event;
+    target.disabled = true;
+    
+    const [file] = model.files;
+    const loader = new GlbLoader();
+    const {indices, vertexAttribs} = await loader.parse(file, true);
+
+    if ('position' in vertexAttribs) {
+      if (vertexAttribs.position.length % 9 !== 0) {
+        throw new Error('expected vertex count to be multiply of 9');
+      }
+
+      const prims = [];
+      for (let i = 0; i < indices.length / 3; i++) {
+        prims.push(new Triangle(i, indices, vertexAttribs.position));
+      }
+      
+      main({
+        vertices: vertexAttribs.position,
+        indices,
+        prims, 
+        algo
+      });
+    } else {
+      throw new Error(`expected GLB to have vertex attribute 'position'`);
+    }
+  }
+});
+
+async function main({vertices, indices, prims, algo}) {
+  // algorithm selection
+  // if (algo === ALGOS.BVH_DF.description) {
+
+  // }
+  
   const sourceCache = new SourceCache({
     'wgsl': './assets/shaders/',
   });
 
   await Promise.all(
     SHADER_SRC.map(file => sourceCache.registerModule(file)));
+
+  console.log(sourceCache);
 
   const canvas = document.getElementById('canvas');
   const adapter = await navigator.gpu?.requestAdapter();
@@ -30,73 +87,6 @@ async function main() {
     format: presentationFormat,
   });
 
-  // console.log(presentationFormat);
-
-  // const computeModule = device.createShaderModule({
-  //   code: sourceCache.fetchModule('s1.wgsl'),
-  // });
-
-  // const pipeline = device.createComputePipeline({
-  //   layout: 'auto',
-  //   compute: { module: computeModule },
-  // });
-
-  // const computePassDescriptor = {
-  //   timestampWrites: {
-  //     querySet,
-  //     beginningOfPassWriteIndex: 0,
-  //     endOfPassWriteIndex: 1,
-  //   },
-  // }
-
-  // const tex = device.createTexture({
-  //   size: [canvas.width, canvas.height],
-  //   format: 'rgba32float',
-  //   usage: GPUTextureUsage.STORAGE_BINGING | GPUTextureUsage.TEXTURE_BINDING,
-  // })
-
-  // const bindGroup = device.createBindGroup({
-  //   layout: pipeline.getBindGroupLayout(0),
-  //   entries: [
-  //     { binding: 0, resource: tex.createView() },
-  //   ],
-  // });
-
-//   function render() {
-//     // renderPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
-//     const encoder = device.createCommandEncoder({label: 'e1'});
-//     const pass = encoder.beginRenderPass(computePassDescriptor);
-
-//     pass.setPipeline(pipeline);
-//     pass.setBindGroup(0, bindGroup);
-//     pass.dispatchWorkgroups(tex.width, tex.height);
-//     pass.end();
-
-//     encoder.resolveQuerySet(querySet, 0, querySet.count, queryBuffer, 0);
-//     if (resultBuffer.mapState === 'unmapped')
-//       encoder.copyBufferToBuffer(queryBuffer, 0, resultBuffer, 0, resultBuffer.size);
-
-//     const commandBuffer = encoder.finish();
-//     device.queue.submit([commandBuffer]);
-
-//     if (resultBuffer.mapState === 'unmapped') {
-//       resultBuffer.mapAsync(GPUMapMode.READ).then(() => {
-//         const  times = new BigInt64Array(resultBuffer.getMappedRange());
-//         console.log(times);
-//         const gpuTime = Number(times[1] - times[0]);
-//         console.log(
-// `gpuTime:
-// \tnanos:  ${gpuTime}
-// \tmicros: ${(gpuTime / 1000000).toFixed(5)}`
-//         );
-//         resultBuffer.unmap();
-//       });
-
-//     }
-
-//     // window.requestAnimationFrame(render);
-//   }
-
   // configure canvas dimensions
   const targetWidth = 1280;
   const targetHeight = 720;
@@ -109,7 +99,8 @@ async function main() {
   const accBufferDescriptor = {
     size: [targetWidth, targetHeight],
     format: 'rgba32float',
-    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | 
+           GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
   };
 
   const accBuffer = [
@@ -150,6 +141,10 @@ async function main() {
   });
 
   // initialize timing machinery
+  const timingState = {
+    runningAvg: 0,
+  };
+
   const querySet = device.createQuerySet({
     type: 'timestamp',
     count: 2,
@@ -183,24 +178,105 @@ async function main() {
     },
   }
 
-  // initialize uniform buffer
-  const uniBuffer = device.createBuffer({
-    size: Uint32Array.BYTES_PER_ELEMENT + 3 * Uint32Array.BYTES_PER_ELEMENT,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-  });
-
   // uniform values
   const uni = {
     samples: 0,
     imageSize: [targetWidth, targetHeight],
   };
 
+  const uniValues = new ArrayBuffer(144);
+  const uniDv = new DataView(uniValues);
+  new Uint32Array(uniValues, 8, 2).set(uni.imageSize);
+
+  // initialize uniform buffer
+  const uniBuffer = device.createBuffer({
+    size: uniValues.byteLength,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+
+  // BVH buffer
+  const bvh = BVH.build(prims);
+  const bvhData = bvh.encodeDF();
+
+  const bvhBuffer = device.createBuffer({
+    size: bvhData.byteLength,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+  });
+
+
+  // vertex buffer
+  const vertexData = new Float32Array(vertices.length * (4/3));
+  for (let i = 0; i < vertices.length / 3; i++) {
+    vertexData[i * 4 + 0] = vertices[i * 3 + 0];
+    vertexData[i * 4 + 1] = vertices[i * 3 + 1];
+    vertexData[i * 4 + 2] = vertices[i * 3 + 2];
+  }
+
+  const vertexBuffer = device.createBuffer({
+    size: vertexData.byteLength,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+  });
+
+  // index buffer
+  const indexData = new Int32Array(indices);
+  const indexBuffer = device.createBuffer({
+    size: indexData.byteLength,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+  });
+
+  device.queue.writeBuffer(bvhBuffer, 0, bvhData);
+  device.queue.writeBuffer(vertexBuffer, 0, vertexData);
+  device.queue.writeBuffer(indexBuffer, 0, indexData);
+
+  // controls
+  const cameraControls = new OrbitalCamera(.01, .9, -50, .002, null, -1);
+  const camera = new CameraNode({camera: {
+    fov: Math.PI / 4,
+    near: 0.001,
+    far: 100,
+  }});
+
+  window.cameraControls = cameraControls;
+  window.camera = camera;
+
+  cameraControls.linkCameraNode(camera);
+  camera.updateProjectionMatrixVk(targetWidth / targetHeight);
+
+  // link controls
+  attachControls(canvas, cameraControls, () => {
+    // zero the sample count
+    uni.samples = 0;
+    timingState.runningAvg = 0;
+    
+    // clear both buffers
+    const encoder = device.createCommandEncoder();
+    accBuffer.forEach(buffer => {
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [
+          {
+            view: buffer.createView(),
+            clearValue: [0, 0, 0, 0],
+            loadOp: 'clear',
+            storeOp: 'store',
+          },
+        ],
+      });
+      pass.end();
+    });
+
+    const commandBuffer = encoder.finish();
+    device.queue.submit([commandBuffer]);
+  });
+
   // rendering loop
   window.requestAnimationFrame(function render() {
     postPassDescriptor.colorAttachments[0].view = context.getCurrentTexture().createView();
     const encoder = device.createCommandEncoder({ label: 'render-enc' });
 
-    const uniValues = new Uint32Array([uni.samples, uni.imageSize[0], uni.imageSize[1]]);
+    // update uniform values
+    uniDv.setUint32(0, uni.samples, true);
+    new Float32Array(uniValues, 16, 16).set(camera.worldMatrix.elements);
+    new Float32Array(uniValues, 16 + 64, 16).set(camera.projectionMatrix.inverse.elements);
     device.queue.writeBuffer(uniBuffer, 0, uniValues);
 
     const compBindGroup = device.createBindGroup({
@@ -209,6 +285,9 @@ async function main() {
         { binding: 0, resource: accBuffer[Number(!accActiveIndex)].createView() },
         { binding: 1, resource: accBuffer[accActiveIndex].createView() },
         { binding: 2, resource: { buffer: uniBuffer }},
+        { binding: 3, resource: { buffer: bvhBuffer }},
+        { binding: 4, resource: { buffer: vertexBuffer }},
+        { binding: 5, resource: { buffer: indexBuffer }},
       ],
     });
 
@@ -253,8 +332,13 @@ async function main() {
       resultBuffer.mapAsync(GPUMapMode.READ).then(() => {
         const  times = new BigInt64Array(resultBuffer.getMappedRange());
         const gpuNanos = Number(times[1] - times[0]);
-        const gpuMicros = gpuNanos / 1e+6;
-        console.log(`us: ${gpuMicros.toFixed(5)}`);
+        const gpuMillis = gpuNanos / 1e+6;
+        
+        timingState.runningAvg *= uni.samples;
+        timingState.runningAvg += gpuMillis;
+        timingState.runningAvg /= (uni.samples + 1);
+
+        console.log(`raw ms: ${gpuMillis.toFixed(3)} / avg ms: ${timingState.runningAvg.toFixed(3)} / samples: ${uni.samples}`);
         resultBuffer.unmap();
       });
     }
@@ -264,4 +348,40 @@ async function main() {
   });
 }
 
-main();
+function attachControls(canvas, cameraControls, resetCallback) {
+  const mouseProps = {
+    mouseDown: false,
+    scrollDown: false,
+  };
+
+  canvas.addEventListener('mousedown', ({button}) => {
+    if (button === 0 || button === 2)
+      mouseProps.mouseDown = true;
+    else if (button === 1)
+      mouseProps.scrollDown = true;
+  });
+
+  canvas.addEventListener('mouseup', ({button}) => {
+    if (button === 0 || button === 2)
+      mouseProps.mouseDown = false;
+    else if (button === 1)
+      mouseProps.scrollDown = false;
+  });
+
+  canvas.addEventListener('mousemove', ({movementX: dx, movementY: dy}) => {
+    if (mouseProps.mouseDown) {
+      cameraControls.pan(dx, dy);
+      resetCallback();
+    }
+
+    if (mouseProps.scrollDown) {
+      cameraControls.strafe(dx, dy);
+      resetCallback();
+    }
+  });
+
+  canvas.addEventListener('wheel', ({deltaY: dy}) => {
+    cameraControls.zoom(dy);
+    resetCallback();
+  });
+}

@@ -48,7 +48,7 @@ const TYPE_TO_NUM_COMPONENTS = {
 };
 
 export class GlbLoader {
-  async parse(file) {
+  async parse(file, disableChecks = false) {
     const [json, bin] = await getChunks(file);
     
     // extract scene
@@ -131,7 +131,8 @@ export class GlbLoader {
         const isEmissive = materials[material].emissiveFactor.some(channel => channel > 0);
         
         // required vertex attributes
-        assert(['POSITION', 'NORMAL'].every(name => name in attributes));
+        if (!disableChecks)
+          assert(['POSITION', 'NORMAL'].every(name => name in attributes));
         
         // extract attribute data
         const attribData = {};
@@ -143,26 +144,29 @@ export class GlbLoader {
         const triangleOffset = indices.length / 3;
         
         // indices are required
-        assert('indices' in primitive, `expected primitive to contain field 'indices': 'glDrawArrays' functionality is unsupported`);
+        if (!disableChecks)
+          assert('indices' in primitive, `expected primitive to contain field 'indices': 'glDrawArrays' functionality is unsupported`);
         
         // fix pointers
-        const rawIndices = getAccessor(json, bin, primitive.indices);
-        const count = rawIndices.length / 3;
-        
-        runningCount += rawIndices.length;
-        
-        for (let i = 0; i < count; i++) {
-          indices.push(
-            vertexOffset + rawIndices[i * 3 + 0],
-            vertexOffset + rawIndices[i * 3 + 1],
-            vertexOffset + rawIndices[i * 3 + 2],
-          );
+        if ('indices' in primitive) {
+          const rawIndices = getAccessor(json, bin, primitive.indices);
+          const count = rawIndices.length / 3;
           
-          if (isEmissive) {
-            emissivePrimitives.push({
-              id: triangleOffset + i,
-              blasIndex: meshIndex,
-            });
+          runningCount += rawIndices.length;
+          
+          for (let i = 0; i < count; i++) {
+            indices.push(
+              vertexOffset + rawIndices[i * 3 + 0],
+              vertexOffset + rawIndices[i * 3 + 1],
+              vertexOffset + rawIndices[i * 3 + 2],
+            );
+            
+            if (isEmissive) {
+              emissivePrimitives.push({
+                id: triangleOffset + i,
+                blasIndex: meshIndex,
+              });
+            }
           }
         }
         
@@ -170,6 +174,15 @@ export class GlbLoader {
         const offset = vertexAttribs.materials.length;
         vertexAttribs.materials.length += numVertices;
         vertexAttribs.materials.fill(material, offset);
+      
+        // auto generate indices to match number of vertices
+        if (!('indices' in primitive)) {
+          indices.length = numVertices;
+          indices.fill();
+          for (let i = 0; i < numVertices; i++) {
+            indices[i] = i;
+          }
+        }
         
         // append geometry data
         if ('TEXCOORD_0' in attribData) {

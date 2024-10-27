@@ -108,6 +108,17 @@ export class Matrix4 {
     
     return this;
   }
+
+  vkPerspective(fov, near, far, aspectRatio) {
+    const tanFov = Math.tan(fov / 2);
+    
+    return this.set(
+      1/(aspectRatio * tanFov), 0, 0, 0,
+      0, 1/tanFov, 0, 0,
+      0, 0, far/(far-near), 1,
+      0, 0, -(near*far)/(far-near), 0,
+    );
+  }
   
   rotationX(t) {
     return this.set(

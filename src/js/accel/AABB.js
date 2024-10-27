@@ -106,6 +106,10 @@ export class AABB {
       (this.#min.z + this.#max.z) * 0.5,
     );
   }
+
+  updateDependentAttribs() {
+    this.update();
+  }
   
   combine(a, b) {
     this.#min.minVectors(a.#min, b.#min);
