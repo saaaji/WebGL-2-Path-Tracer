@@ -1,4 +1,5 @@
 import { AABB } from '../../../src/js/accel/AABB.js';
+import { createEnum } from '../../../src/js/utilities/util.js';
 
 class AggregatePrimitive {
   constructor(prims) {
@@ -95,15 +96,45 @@ export class BVH {
     }
   }
 
-  encodeDF(halfPrecision = false) {
+  static SERIALIZE_ORDER = createEnum('DF', 'BF');
+
+  serialize({
+    order = BVH.SERIALIZE_ORDER.DF,
+    stackless = false,
+    halfPrecision = false,
+  }) {
     const buffer = new ArrayBuffer(this.numNodes * Float32Array.BYTES_PER_ELEMENT * 8);
     const view = new DataView(buffer);
     
     let node;    
     let structIndex = 0;
-    const stack = [this];
+    const stackOrQ = [this];
 
-    while (node = stack.pop()) {
+    const calcChildIndex = {
+      firstChildOffsetBf: 0,
+      [BVH.SERIALIZE_ORDER.DF](node, structIndex, stackless) {
+        // compute miss link
+        if (stackless) {
+          return !node.isRightmostNode ? structIndex + node.numNodes : -1;
+        }
+
+        // return index of right child
+        return !node.prim ? structIndex + 1 + node.left.numNodes : -1;
+      },
+      [BVH.SERIALIZE_ORDER.BF](node, structIndex, stackless) {
+        // for now, stackless does not necessarily make sense with BF order
+        // return index of first child
+        if (!node.prim) {
+          this.firstChildOffsetBf++;
+          return structIndex + this.firstChildOffsetBf;
+        } else {
+          this.firstChildOffsetBf--;
+          return -1;
+        }
+      },
+    };
+
+    while (order === BVH.SERIALIZE_ORDER.DF ? (node = stackOrQ.pop()) : (node = stackOrQ.shift())) {
       if (!halfPrecision) {
         for (let i = 0; i < 8; i++) {
           const structInteriorOffset = structIndex * 32 + i * 4;
@@ -112,31 +143,37 @@ export class BVH {
               view.setFloat32(structInteriorOffset, node.boundingBox.min[i], true);
               break;
             case 3:
-              view.setInt32(structInteriorOffset, node.prim?.id ?? -1, true);
+              // map partition axis from [0, 2] to [-3, -1] if not a leaf node
+              view.setInt32(structInteriorOffset, node.prim?.id ?? -(node.partitionAxis + 1), true);
               break;
             case 4: case 5: case 6:
               view.setFloat32(structInteriorOffset, node.boundingBox.max[i % 4], true);
               break;
             case 7:
-              view.setInt32(structInteriorOffset, !node.prim ? structIndex + 1 + node.left.numNodes : -1, true);
+              view.setInt32(structInteriorOffset, calcChildIndex[order](node, structIndex, stackless), true);
               break;
           }
         }
       }
 
-      if (structIndex == 0) console.log(buffer.slice());
-
       if (!node.prim) {
-        stack.push(node.right, node.left);
+        const pushOrder = [node.right, node.left];
+        if (order === BVH.SERIALIZE_ORDER.BF) {
+          pushOrder.reverse();
+        }
+
+        stackOrQ.push(...pushOrder);
       }
 
       structIndex++;
     }
 
-    return buffer;
-  }
+    const meta = {
+      order,
+      stackless,
+      halfPrecision,
+    };
 
-  encodeBF(halfPrecision = false) {
-
+    return {meta, buffer};
   }
 }

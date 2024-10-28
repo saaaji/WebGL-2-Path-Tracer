@@ -3,6 +3,7 @@ import { OrbitalCamera } from '../../src/js/utilities/OrbitCamera.js';
 import { CameraNode } from '../../src/js/utilities/SceneGraphNode.js';
 import { GlbLoader } from '../../src/js/loading/GlbLoader.js';
 import { BVH } from './utils/BVH.js';
+import { Grid } from './utils/Grid.js';
 import { Triangle } from '../../src/js/utilities/primitives.js';
 import { createEnum } from '../../src/js/utilities/util.js';
 
@@ -11,11 +12,28 @@ const SHADER_SRC = [
   'comp.wgsl', 
   'ray_util.wgsl',
   'bvh_util.wgsl',
+  'grid_util.wgsl',
   'rand.wgsl',
 ];
+
 const ALGOS = createEnum(
-  'BVH_DF',
+  'BVH_FIXED_DF',
+  'BVH_STACKLESS_DF',
+  'BVH_FTB_BF',
+  'BVH_BTF_BF',
+  'BVH_RAND_BF',
+  'BVH_FIXED_BF',
+  'GRID',
+  'KDTREE',
 );
+
+console.log(ALGOS);
+
+for (const key of Object.keys(ALGOS)) {
+  const option = document.createElement('option');
+  option.value = option.innerText = key;
+  document.getElementById('algo').appendChild(option);
+} 
 
 document.getElementById('benchmark').addEventListener('click', async event => {
   const model = document.getElementById('model');
@@ -53,11 +71,6 @@ document.getElementById('benchmark').addEventListener('click', async event => {
 });
 
 async function main({vertices, indices, prims, algo}) {
-  // algorithm selection
-  // if (algo === ALGOS.BVH_DF.description) {
-
-  // }
-  
   const sourceCache = new SourceCache({
     'wgsl': './assets/shaders/',
   });
@@ -125,7 +138,12 @@ async function main({vertices, indices, prims, algo}) {
   const compPipeline = device.createComputePipeline({
     label: 'comp-pipeline',
     layout: 'auto',
-    compute: { module: compModule },
+    compute: { 
+      module: compModule,
+      constants: {
+        ALGO: getAlgoEnum(algo),
+      }
+    },
   });
 
   const postModule = device.createShaderModule({
@@ -184,7 +202,7 @@ async function main({vertices, indices, prims, algo}) {
     imageSize: [targetWidth, targetHeight],
   };
 
-  const uniValues = new ArrayBuffer(144);
+  const uniValues = new ArrayBuffer(192);
   const uniDv = new DataView(uniValues);
   new Uint32Array(uniValues, 8, 2).set(uni.imageSize);
 
@@ -195,14 +213,73 @@ async function main({vertices, indices, prims, algo}) {
   });
 
   // BVH buffer
-  const bvh = BVH.build(prims);
-  const bvhData = bvh.encodeDF();
+  const bvhEntries = [{
+    binding: 5,
+    resource: {},
+  }];
+  
+  if (algo.startsWith('BVH')) {
+    const options = {
+      order: BVH.SERIALIZE_ORDER[algo.slice(-2)],
+      stackless: algo.includes('STACKLESS'),
+      halfPrecision: false,
+    };
 
-  const bvhBuffer = device.createBuffer({
-    size: bvhData.byteLength,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-  });
+    console.log('serializing BVH with options:', options);
 
+    const bvh = BVH.build(prims);
+    const bvhData = bvh.serialize(options);
+    
+    console.log(bvh, bvhData);
+
+    bvhEntries[0].resource.buffer = device.createBuffer({
+      size: bvhData.buffer.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    device.queue.writeBuffer(bvhEntries[0].resource.buffer, 0, bvhData.buffer);
+  } else {
+    // write nothing
+    bvhEntries[0].resource.buffer = device.createBuffer({
+      size: 32,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+  }
+
+  // GRID buffer
+  const gridEntries = [
+    { binding: 6, resource: {} },
+    { binding: 7, resource: {} },
+  ];
+
+  if (algo.startsWith('GRID')) {
+    const grid = new Grid(prims);
+    const gridData = grid.serialize();
+
+    console.log(grid, gridData);
+
+    gridEntries[0].resource.buffer = device.createBuffer({
+      size: gridData.cellToList.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    gridEntries[1].resource.buffer = device.createBuffer({
+      size: gridData.primLists.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    device.queue.writeBuffer(gridEntries[0].resource.buffer, 0, gridData.cellToList);
+    device.queue.writeBuffer(gridEntries[1].resource.buffer, 0, gridData.primLists);
+
+    new Int32Array(uniValues, 144, 3).set(grid.res);
+    new Float32Array(uniValues, 160, 3).set([...grid.bounds.min]);
+    new Float32Array(uniValues, 176, 3).set(grid.cellSize);
+  } else {
+    gridEntries.forEach(entry => entry.resource.buffer = device.createBuffer({
+      size: 8,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    }));
+  }
 
   // vertex buffer
   const vertexData = new Float32Array(vertices.length * (4/3));
@@ -224,7 +301,6 @@ async function main({vertices, indices, prims, algo}) {
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
   });
 
-  device.queue.writeBuffer(bvhBuffer, 0, bvhData);
   device.queue.writeBuffer(vertexBuffer, 0, vertexData);
   device.queue.writeBuffer(indexBuffer, 0, indexData);
 
@@ -285,9 +361,10 @@ async function main({vertices, indices, prims, algo}) {
         { binding: 0, resource: accBuffer[Number(!accActiveIndex)].createView() },
         { binding: 1, resource: accBuffer[accActiveIndex].createView() },
         { binding: 2, resource: { buffer: uniBuffer }},
-        { binding: 3, resource: { buffer: bvhBuffer }},
-        { binding: 4, resource: { buffer: vertexBuffer }},
-        { binding: 5, resource: { buffer: indexBuffer }},
+        { binding: 3, resource: { buffer: vertexBuffer }},
+        { binding: 4, resource: { buffer: indexBuffer }},
+        ...bvhEntries,
+        ...gridEntries,
       ],
     });
 
@@ -384,4 +461,33 @@ function attachControls(canvas, cameraControls, resetCallback) {
     cameraControls.zoom(dy);
     resetCallback();
   });
+}
+
+function getAlgoEnum(algo) {
+  /*
+  codes:
+  0 - BVH DF fixed
+  1 - BVH DF stackless
+  2 - BVH BF ordered
+  3 - GRID
+  4 - KDTREE
+  */
+  
+  if (algo.startsWith('BVH')) {
+    if (algo.endsWith('DF')) {
+      if (algo.includes('STACKLESS')) {
+        return 1;
+      } else {
+        return 0;
+      }
+    } else if (algo.endsWith('BF')) {
+      return 2;
+    }
+  } else if (algo.startsWith('GRID')) {
+    return 3;
+  } else if (algo.startsWith('KDTREE')) {
+    return 4;
+  } else {
+    throw new Error(`could not match algo with code: '${algo}'`);
+  }
 }

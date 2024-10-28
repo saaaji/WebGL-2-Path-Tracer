@@ -58,10 +58,10 @@ fn ray_tri_isect(ray: Ray, tri: TriPrim, t_min: f32, t_max: f32, info: ptr<funct
   return true;
 }
 
-fn ray_aabb_isect(ray: Ray, mini: vec3f, maxi: vec3f, t_min: f32, t_max: f32) -> bool {
+fn ray_aabb_isect(ray: Ray, mini: vec3f, maxi: vec3f, t_min: f32, t_max: f32, t: ptr<function, f32>) -> bool {
   var t_min_mut = t_min;
   var t_max_mut = t_max;
-  
+
   for (var ax: i32 = 0; ax < 3; ax++) {
     let dInv: f32 = 1.0 / ray.d[ax];
     var t0: f32 = (mini[ax] - ray.o[ax]) * dInv;
@@ -75,6 +75,7 @@ fn ray_aabb_isect(ray: Ray, mini: vec3f, maxi: vec3f, t_min: f32, t_max: f32) ->
 
     t_min_mut = max(t0, t_min_mut);
     t_max_mut = min(t1, t_max_mut);
+    *t = t_min_mut;
 
     if (t_max_mut <= t_min_mut) {
       return false;
@@ -84,14 +85,14 @@ fn ray_aabb_isect(ray: Ray, mini: vec3f, maxi: vec3f, t_min: f32, t_max: f32) ->
   return true;
 }
 
-fn fetch_tri(id: i32, vertices: ptr<storage, array<vec3f>, read>, indices: ptr<storage, array<i32>, read>) -> TriPrim {
-  let i0 = (*indices)[id * 3 + 0];
-  let i1 = (*indices)[id * 3 + 1];
-  let i2 = (*indices)[id * 3 + 2];
+fn fetch_tri(id: i32) -> TriPrim {
+  let i0 = indices[id * 3 + 0];
+  let i1 = indices[id * 3 + 1];
+  let i2 = indices[id * 3 + 2];
 
-  let v0 = (*vertices)[i0];
-  let v1 = (*vertices)[i1];
-  let v2 = (*vertices)[i2];
+  let v0 = vertices[i0];
+  let v2 = vertices[i2];
+  let v1 = vertices[i1];
 
   return TriPrim(v0, v1, v2);
 }

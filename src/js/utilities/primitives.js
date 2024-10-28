@@ -10,7 +10,7 @@ export class Triangle {
   #boundingBox = new AABB();
   
   constructor(triangleIndex, indices, vertices, stride = 3) {
-    if (!triangleIndex) return;
+    // if (!triangleIndex) return;
 
     const realIndex = triangleIndex * stride;
     
