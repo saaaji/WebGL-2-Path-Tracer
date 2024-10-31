@@ -15,11 +15,11 @@ export class Grid {
     this.bounds.updateDependentAttribs();
 
     this.volume = [...primBounds.diag].reduce((p, d) => p * d, 1);
-    // this.res = [...primBounds.diag].map(s => Math.ceil(
-    //   s * Math.cbrt((lambda * prims.length) / this.volume)
-    // ));
+    this.res = [...primBounds.diag].map(s => Math.ceil(
+      s * Math.cbrt((lambda * prims.length) / this.volume)
+    ));
 
-    this.res = [50, 50, 25];
+    // this.res = [50, 50, 25];
     this.cellSize = [...primBounds.diag].map((n, i) => n / this.res[i]);
     this.cells = new Array([...this.res].reduce((p, d) => p * d, 1)).fill().map(() => []);
 
@@ -46,6 +46,7 @@ export class Grid {
 
   serialize() {
     const cellToList = new Int32Array(2 * this.cells.length).fill(-1);
+    const view = new DataView(cellToList.buffer);
     const primLists = [];
     
     for (let i = 0; i < this.cells.length; i++) {

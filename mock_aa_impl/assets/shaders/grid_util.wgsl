@@ -3,6 +3,8 @@ fn ray_grid_isect(ray: Ray, t_min: f32, t_max: f32, info: ptr<function, IsectInf
   if (!ray_aabb_isect(ray, uni.grid.origin, uni.grid.origin + vec3f(uni.grid.res) * uni.grid.cell_size, t_min, t_max, &t_box)) {
     return false;
   }
+
+  (*info).cost = 0.5;
   
   // compute grid traversal parameters
   let map = array(2, 1, 2, 1, 2, 2, 0, 0);
@@ -25,11 +27,15 @@ fn ray_grid_isect(ray: Ray, t_min: f32, t_max: f32, info: ptr<function, IsectInf
     if (grid_cell.count > 0) {
       for (var i: i32 = 0; i < grid_cell.count; i++) {
         let tri = fetch_tri(cell_prims[grid_cell.prim_start + i]);
+
+        let old_cost = (*info).cost;
         if (ray_tri_isect(ray, tri, t_min, t_closest, &temp_info)) {
           t_closest = temp_info.t;
           (*info) = temp_info;
           any_hit = true;
         }
+
+        (*info).cost = old_cost + 1.0;
       }
     }
 

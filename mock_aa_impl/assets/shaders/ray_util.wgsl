@@ -85,6 +85,34 @@ fn ray_aabb_isect(ray: Ray, mini: vec3f, maxi: vec3f, t_min: f32, t_max: f32, t:
   return true;
 }
 
+fn ray_aabb_isect2(ray: Ray, mini: vec3f, maxi: vec3f, t_min: f32, t_max: f32, t: ptr<function, vec2f>) -> bool {
+  var t_min_mut = t_min;
+  var t_max_mut = t_max;
+
+  for (var ax: i32 = 0; ax < 3; ax++) {
+    let dInv: f32 = 1.0 / ray.d[ax];
+    var t0: f32 = (mini[ax] - ray.o[ax]) * dInv;
+    var t1: f32 = (maxi[ax] - ray.o[ax]) * dInv;
+
+    if (dInv < 0.0) {
+      var temp = t0;
+      t0 = t1;
+      t1 = temp;
+    }
+
+    t_min_mut = max(t0, t_min_mut);
+    t_max_mut = min(t1, t_max_mut);
+    (*t)[0] = t_min_mut;
+    (*t)[1] = t_max_mut;
+
+    if (t_max_mut <= t_min_mut) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 fn fetch_tri(id: i32) -> TriPrim {
   let i0 = indices[id * 3 + 0];
   let i1 = indices[id * 3 + 1];

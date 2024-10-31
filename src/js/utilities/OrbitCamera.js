@@ -110,6 +110,26 @@ export class OrbitalCamera {
   copyCameraNode(cameraNode) {
     // const viewMatrix;
   }
+
+  toJson() {
+    return JSON.stringify({
+      phi: this.#spherical.phi,
+      theta: this.#spherical.theta,
+      distance: this.#distance,
+      invert: this.#invert,
+      origin: [...this.#origin],
+    });
+  }
+
+  fromJson(text) {
+    const params = JSON.parse(text);
+    this.#spherical.phi = params.phi;
+    this.#spherical.theta = params.theta;
+    this.#distance = params.distance;
+    this.#invert = params.invert;
+    this.#origin.set(...params.origin);
+    this.#update();
+  }
   
   get viewMatrix() {
     return this.#matrix.inverse;
