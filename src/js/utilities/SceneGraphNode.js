@@ -434,6 +434,17 @@ export class CameraNode extends SceneGraphNode {
     return this;
   }
 
+  updateProjectionMatrixVk(aspectRatio) {
+    this.projectionMatrix.vkPerspective(
+      this.camera.fov,
+      this.camera.near,
+      this.camera.far,
+      aspectRatio,
+    );
+    
+    return this;
+  }
+
   get viewMatrix() {
     return this.matrix.inverse;
   }

@@ -3,12 +3,15 @@ import { Vector3 } from '../math/Vector3.js';
 import { AABB } from '../accel/AABB.js';
 
 const GLSL_EPSILON = 1e-3;
+const MACHINE_EPSILON = 2 ** (-23);
 
 export class Triangle {
   #id;
   #boundingBox = new AABB();
   
   constructor(triangleIndex, indices, vertices, stride = 3) {
+    // if (!triangleIndex) return;
+
     const realIndex = triangleIndex * stride;
     
     const a = indices[realIndex] * 3,
@@ -45,6 +48,45 @@ export class Triangle {
       Math.max(aZ, bZ, cZ) + offset,
     );
     this.#boundingBox.update();
+  }
+
+  static constructRaw(vertices, index) {
+    const a = index * 9;
+    const b = index * 9 + 3;
+    const c = index * 9 + 6;
+
+    const aX = vertices[a],
+      aY = vertices[a + 1],
+      aZ = vertices[a + 2];
+    
+    const bX = vertices[b],
+      bY = vertices[b + 1],
+      bZ = vertices[b + 2];
+    
+    const cX = vertices[c],
+      cY = vertices[c + 1],
+      cZ = vertices[c + 2];
+    
+    const approxEquals = (x, y) => Math.abs(x - y) <= Number.EPSILON;
+    const needsEpsilon = (
+      approxEquals(aX, bX) && approxEquals(aX, cX) ||
+      approxEquals(aY, bY) && approxEquals(aY, cY) ||
+      approxEquals(aZ, bZ) && approxEquals(aZ, cZ)
+    );
+
+    const offset = needsEpsilon ? MACHINE_EPSILON : 0;
+    const tri = new Triangle();
+    
+    tri.#id = index;
+    tri.#boundingBox.set(
+      Math.min(aX, bX, cX),
+      Math.min(aY, bY, cY),
+      Math.min(aZ, bZ, cZ),
+      Math.max(aX, bX, cX) + offset,
+      Math.max(aY, bY, cY) + offset,
+      Math.max(aZ, bZ, cZ) + offset,
+    );
+    tri.#boundingBox.updateDependentAttribs();
   }
   
   get id() {

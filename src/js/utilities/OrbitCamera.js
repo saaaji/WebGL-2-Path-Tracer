@@ -10,6 +10,7 @@ export class OrbitalCamera {
   #originMatrix = new Matrix4();
   #matrix = new Matrix4();
   #distance;
+  #invert = 1;
   
   // spherical coordinates
   #spherical = {
@@ -26,12 +27,13 @@ export class OrbitalCamera {
 
   #cameraNode = null;
   
-  constructor(panSpeed, zoomSpeed, distance, strafeSpeed, onchange = null) {
+  constructor(panSpeed, zoomSpeed, distance, strafeSpeed, onchange = null, invert = 1) {
     this.panSpeed = panSpeed;
     this.zoomSpeed = zoomSpeed;
     this.strafeSpeed = strafeSpeed,
     this.onchange = onchange;
     this.#distance = distance;
+    this.#invert = invert;
     
     /** @deprecated */
     this.projectionMatrix = new Matrix4();
@@ -56,7 +58,7 @@ export class OrbitalCamera {
     
     this.#matrix.setColumn(0, this.#x);
     this.#matrix.setColumn(1, this.#y);
-    this.#matrix.setColumn(2, this.#z);
+    this.#matrix.setColumn(2, this.#z.clone().scale(this.#invert));
     this.#matrix.setColumn(3, this.#z.clone().scale(this.#distance));
 
     this.#originMatrix.setColumn(3, this.#origin);
@@ -107,6 +109,26 @@ export class OrbitalCamera {
   
   copyCameraNode(cameraNode) {
     // const viewMatrix;
+  }
+
+  toJson() {
+    return JSON.stringify({
+      phi: this.#spherical.phi,
+      theta: this.#spherical.theta,
+      distance: this.#distance,
+      invert: this.#invert,
+      origin: [...this.#origin],
+    });
+  }
+
+  fromJson(text) {
+    const params = JSON.parse(text);
+    this.#spherical.phi = params.phi;
+    this.#spherical.theta = params.theta;
+    this.#distance = params.distance;
+    this.#invert = params.invert;
+    this.#origin.set(...params.origin);
+    this.#update();
   }
   
   get viewMatrix() {
