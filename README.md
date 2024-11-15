@@ -4,6 +4,10 @@ I recently conducted a study of the performance of different ray tracing
 acceleration structures on integrated GPUs for my scientific writing class. You 
 can view the results and accompanying article [here](https://github.com/saaaji/WebGL-2-Path-Tracer/blob/main/WRTG3030_MockAcademicArticle_RayTracingAcceleration.pdf).
 
+An image produced by my renderer was selected for a monthly showcase on 
+the [Graphics Programming discord's](https://graphics-programming.org/) site.
+You can view it [here](https://graphics-programming.org/showcase-2021-12)! (under the name `@saaji#9697`)
+
 ![Preview Image](https://user-images.githubusercontent.com/47622452/193398278-601ac33f-7ad9-49a9-ade4-b636312eead3.png)
 ## README Contents
 1. [Overview](#overview)
