@@ -1,5 +1,9 @@
 # [WebGL-2-Path-Tracer](https://saaaji.github.io/WebGL-2-Path-Tracer/src/)
-### A path tracer implemented in JavaScript using the WebGL 2 API
+### A path tracer implemented in JavaScript using the WebGL 2 (& WebGPU) APIs
+I recently conducted a study of the performance of different ray tracing 
+acceleration structures on integrated GPUs for my scientific writing class. You 
+can view the results and accompanying article [here](https://github.com/saaaji/WebGL-2-Path-Tracer/blob/main/WRTG3030_MockAcademicArticle_RayTracingAcceleration.pdf).
+
 ![Preview Image](https://user-images.githubusercontent.com/47622452/193398278-601ac33f-7ad9-49a9-ade4-b636312eead3.png)
 ## README Contents
 1. [Overview](#overview)
