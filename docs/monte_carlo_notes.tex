@@ -1,0 +1,120 @@
+\documentclass{article}
+\usepackage{enumerate}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{amsfonts}
+\usepackage{amsthm}
+\usepackage{pgffor}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage[a4paper]{geometry}
+
+\def\set#1{%
+    \ensuremath{%
+        \ifx!#1!\emptyset\else
+            \{%
+                \foreach[count=\i] \x in {#1}{%
+                    \ifnum\i>1,\,\fi%
+                    \x%
+                }%
+            \}
+        \fi%
+    }%
+}
+
+\allowdisplaybreaks
+\renewcommand\qedsymbol{QED}
+\newtheorem{theorem}{Theorem}
+\newtheorem{axiom}{Axiom}
+\newtheorem{lemma}[theorem]{Lemma}
+\newcommand{\E}{\mathrm{E}}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\Cov}{\mathrm{Cov}}
+
+\begin{document}
+  \begin{center}
+    \section*{Monte Carlo Notes}
+  \end{center}
+  
+  The following are definitions and derivations that 
+  are explicitly written down with the hope that 
+  they will help guide the ray tracer implementation.
+
+  \section{Monte Carlo Estimator and Radiance}
+
+  We intend to probabilistically approximate the integral $\int_{D^\ast}f$ for some 
+  integrable function $f\,:\,D\to R$, where $D^\ast \subseteq D$.
+  The Monte Carlo estimator will suffice:
+  given $n$ iid samples $\bm{X}_i \in D^\ast$ s.t. $\bm{X}_i \sim p \implies 
+  p(D \setminus D^\ast) = 0$ 
+  (with the usual restriction that $\int_{D} p = 1$), we define our estimator 
+  \begin{align*}
+    &\bm{M}_n = \frac{1}{n}\sum_{i=1}^{n} \frac{f(\bm{X}_i)}{p(\bm{X}_i)}\\
+    \implies &\begin{cases}
+      \E[\bm{M}_n] &= \int_{D}p(\bm{x})\cdot\frac{1}{n}\sum_{i=1}^{n} \frac{f(\bm{x})}{p(\bm{x})}\,d\bm{x}\\
+                   &= \frac{1}{n}\sum_{i=1}^{n}
+                      \int_{D^\ast}\frac{f(\bm{x})}{p(\bm{x})} p(\bm{x})\,d\bm{x}\\
+                   &= \int_{D^\ast}f = \mu\\
+      \Var[\bm{M}_n] &= \Var[\frac{1}{n}\sum_{i=1}^{n} \frac{f(\bm{X}_i)}{p(\bm{X}_i)}]\\
+                     &= \frac{1}{n^2}\sum_{i=1}^{n}\Var[f(\bm{X}_i) / p(\bm{X}_i)]\\
+                     &= \frac{1}{n}\Var[f(\bm{X}_i) / p(\bm{X}_i)]
+    \end{cases}
+  \end{align*}
+  Thus $\lim_{n \to \infty} \Var[\bm{M}_n] = 0$. 
+  The definition of variance suggests that 
+  increasing the number of samples reduces 
+  squared error: $\Var[\bm{M}_n] = \E[(\bm{M}_n - \mu)^2]$, 
+  which in turn suggests that the estimator converges to the desired integral 
+  (which could perhaps be rationalized as a consequence of the law of large numbers).
+
+  In a ray tracing application, we seek to approximate 
+  the integral term (reflected radiance $L_r$) of the rendering equation:
+  \begin{align*}
+    L_r(\bm{x}, \omega_o) = \int_{\Omega} f(\bm{x}, \omega_i, \omega_o)L_i(\bm{x}, \omega_i)\cos \theta\, d\omega_i
+  \end{align*}
+  with BSDF $f$, incoming radiance $L_i$, incoming direction $\omega_i$,
+  and outgoing direction $\omega_o$ at point $\bm{x}$.
+  \section{Improving Estimator Efficiency}
+  \subsection{Importance Sampling}
+    Suppose we pick $p$ s.t. $p = kf$, where $f$ is the estimated function from before.
+    Then $\int_{D}p = 1 \implies k = 1 / \int_{D^\ast}f$,
+    in which case the estimator term $\frac{f(\bm{X}_i)}{p(\bm{X}_i)} = \int_{D^\ast} f = \mu$ already.
+    Then $\Var[\bm{M}_n] = 0$ immediately.
+    While this ideal $p$ defeats the purpose of the Monte Carlo estimator,
+    it intuitively follows that picking $p$ that roughly 
+    conforms to the ``shape'' of $f$ will decrease estimator variance.
+    In practice, this means making $p$ large when the contribution from $f$ is 
+    large and vice-versa for when the contribution from $f$ is relatively small.
+  \subsection{Multiple Importance Sampling (MIS)}
+    It may be desireable to utilize multiple densities $p_i$ 
+    when estimating the rendering equation. 
+    Veach et al (1997) offers the multi-sample Monte Carlo estimator:
+    \begin{align*}
+      \bm{M}_n^\ast = \sum_{i=1}^{n} \frac{1}{n_i} 
+                      \sum_{j=1}^{n} w_i(\bm{X}_{i,\,j})\frac{f(\bm{X}_{i,\,j})}{p_i(\bm{X}_{i,\,j})}
+    \end{align*}
+    given a set of densities $\set{p_1,\dots,p_n}$ and $n_i$ samples 
+    drawn for each $p_i$ and $\bm{X}_{i,\,j} \sim p_i$.
+
+    We expect that the bias, $\beta(\bm{M}) = \E[\bm{M}] - \int_{D^\ast}f$ is still zero 
+    so long as we impose the conditions that 
+    \textbf{(W1)} $\sum_{i=1}^{n}w_i(\bm{x}) = 1$ when $f(\bm{x})\neq0$ and 
+    \textbf{(W2)} $w_i(\bm{x}) = 0$ when $p_i(\bm{x}) = 0$:
+    \begin{proof}[The multi-sample estimator is unbiased: $\beta(\bm{M}_n^\ast) = 0$]
+      Each random sample $\bm{X}_{i,\,j}$ is not necessarily 
+      identically-distributed but they are nevertheless independent, 
+      so we can manipulate the expectation accordingly,
+      assuming each $n_i \geq 1$:
+      \begin{align*}
+        \E[\bm{M}_n^\ast] &= 
+        \int_{D}\sum_{i=1}^{n} \frac{1}{n_i} 
+        \sum_{j=1}^{n} w_i(\bm{x})\frac{f(\bm{x})}{p_i(\bm{x})}\cdot p_i(\bm{x})\,d\bm{x}\\
+        &= \int_{D^\ast}\sum_{i=1}^{n} w_i(\bm{x})f(\bm{x})\,d\bm{x}\\
+        &= \int_{D^\ast}f, \text{ by \textbf{(W1)}}
+      \end{align*}
+    \end{proof}
+    Veach et al offers the power heuristic as a ``good'' 
+    weighting function: $w_i(\bm{x}) = \frac{[n_ip_i(\bm{x})]^\gamma}{\sum_{k}[n_kp_k(\bm{x})]^\gamma}$,
+    where $\gamma = 1$ produces the simpler balance heuristic ($\gamma = 2$ is 
+    often sufficient).
+\end{document}
