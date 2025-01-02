@@ -17,6 +17,7 @@
                     \ifnum\i>1,\,\fi%
                     \x%
                 }%
+                \,
             \}
         \fi%
     }%
@@ -40,7 +41,7 @@
   are explicitly written down with the hope that 
   they will help guide the ray tracer implementation.
 
-  \section{Monte Carlo Estimator and Radiance}
+  \section{Monte Carlo Estimator}
 
   We intend to probabilistically approximate the integral $\int_{D^\ast}f$ for some 
   integrable function $f\,:\,D\to R$, where $D^\ast \subseteq D$.
@@ -67,13 +68,6 @@
   which in turn suggests that the estimator converges to the desired integral 
   (which could perhaps be rationalized as a consequence of the law of large numbers).
 
-  In a ray tracing application, we seek to approximate 
-  the integral term (reflected radiance $L_r$) of the rendering equation:
-  \begin{align*}
-    L_r(\bm{x}, \omega_o) = \int_{\Omega} f(\bm{x}, \omega_i, \omega_o)L_i(\bm{x}, \omega_i)\cos \theta\, d\omega_i
-  \end{align*}
-  with BSDF $f$, incoming radiance $L_i$, incoming direction $\omega_i$,
-  and outgoing direction $\omega_o$ at point $\bm{x}$.
   \section{Improving Estimator Efficiency}
   \subsection{Importance Sampling}
     Suppose we pick $p$ s.t. $p = kf$, where $f$ is the estimated function from before.
@@ -116,5 +110,184 @@
     Veach et al offers the power heuristic as a ``good'' 
     weighting function: $w_i(\bm{x}) = \frac{[n_ip_i(\bm{x})]^\gamma}{\sum_{k}[n_kp_k(\bm{x})]^\gamma}$,
     where $\gamma = 1$ produces the simpler balance heuristic ($\gamma = 2$ is 
-    often sufficient).
+    often sufficient). And it is clear that 
+    the power heuristic meets both weight function criteria.
+
+  \subsection{Russian Roulette}
+    Russian roulette offers a way to terminate paths while 
+    maintaining an unbiased estimate. 
+    After picking an arbitrary termination probability 
+    $q\in [0, 1]$ (usually increasing as the integrand becomes smaller), we 
+    define a new discrete estimator 
+    $\bm{R} \in \set{\frac{1}{1-q}\bm{M}_n^\ast, \vec{0}}$
+    s.t. $P(\bm{R} = \frac{1}{1-q}\bm{M}_n^\ast) = 1-q$ and 
+    $P(\bm{R} = \vec{0}) = q$.
+    Then 
+    \begin{align*}
+      \E[\bm{R}] &= (1-q)\cdot \frac{1}{1-q}\E[\bm{M}_n^\ast] + q \cdot \vec{0}
+      = \E[\bm{M}_n^\ast]
+    \end{align*}
+
+  \section{Light Transport}
+  \subsection{Rendering Equation}
+    Radiance is flux per unit projected area per unit solid angle 
+    (watts/(steradian$\cdot$m$^2$)),
+    which is what we seek to measure.
+    The rendering equation describes 
+    outgoing radiance from a point $\bm{x}$ 
+    in a direction $\bm{\Theta}$: 
+    \begin{align*}
+      L(\bm{x}\to \bm{\Theta}) = L_e(\bm{x}\to\bm{\Theta}) + 
+      \int_{\Omega_{\bm{x}}}f_r(\bm{x},\bm{\Psi}\to\bm{\Theta})
+      L(\bm{x}\gets \bm{\Psi})|\bm{N_x}\cdot \bm{\Psi}|\,d\bm{\omega_\bm{\Psi}}
+    \end{align*}
+    Given incoming direction(s) $\bm{\Psi}$, BRDF $f_r$, 
+    incoming radiance $L$, emitted radiance $L_e$, 
+    and surface normal $\bm{N_x}$.
+    Alternatively, the 
+    area formulation of the rendering equation 
+    states that 
+    \begin{align*}
+      L(\bm{x}\to \bm{\Theta}) = L_e(\bm{x}\to\bm{\Theta}) + 
+      \int_{A}f_r(\bm{x},\bm{\Psi}\to\bm{\Theta})L(\bm{y}\to -\bm{\Psi})
+      V(\bm{x},\bm{y})\frac{|\bm{N_x}\cdot\bm{\Psi}||\bm{N_y}\cdot -\bm{\Psi}|}{r_{\bm{xy}}^2}\,dA_{\bm{y}}
+    \end{align*}
+    because incoming radiance is 
+    equivalent to ougoing radiance from 
+    every other point $\bm{y}$ in the scene,
+    with the visibility term $V$ to account for 
+    obstructions.
+    The area formulation enables importance sampling of 
+    light sources in a scene,
+    so it is useful to use it for ``direct'' illumination 
+    and the preceding hemispherical formulation for ``indirect'' 
+    illumination:
+    \begin{align*}
+      L_r(\bm{x}\to\bm{\Theta}) = 
+      &\int_{A}f_r(\bm{x}, \bm{\Theta}\to\bm{\Psi})L_e(y\to-\bm{\Psi})
+      V(\bm{x},\bm{y})G(\bm{x},\bm{y})\,dA_{\bm{y}}
+      +\\
+      &\int_{\omega_{\bm{x}}}f_r(\bm{x}, \bm{\Theta}\to\bm{\Psi})
+      L_i(x\gets \bm{\Psi})|\bm{N_x}\cdot\bm{\Psi}|\,d\omega_{\bm{\Psi}}
+    \end{align*}
+    where $L_i$ is reflected radiance from the incoming direction $\bm{\Psi}$.
+  \section{BxDF Models}
+  \subsection{Lambertian BRDF}
+  The Lambertian diffuse model requires 
+  just a reflectance spectrum $\bm{C}$ and 
+  is weighted by a normalization factor $1/\pi$:
+  $f_r = \frac{\bm{C}}{\pi}$.
+  It suffices to sample the cosine term of the rendering equation.
+  \subsection{Specular BxDF}
+  Specular reflection and transmission is similarly simple,
+  operating under the assumption that 
+  $\theta_i = \theta_o$ for reflections.
+  Transmissions abide by 
+  Snell's law, 
+  which states that given 
+  indices of refraction $\eta_i$ and $\eta_t$,
+  we have $\eta_i\sin\theta_i = \eta_t\sin\theta_t$.
+
+  The Fresnel equations describe the proportion of 
+  reflected and transmitted light at a surface and 
+  depend on the index of refraction and 
+  incident angle. 
+  Dielectrics have real-valued IORs while 
+  conductors have complex IORs.
+  This property of dielectrics yields 
+  the following reflectance 
+  formulae for 
+  parallel polarized light and 
+  perpendicular polarized light, respectively:
+  \begin{align*}
+    r_{\|} &= \frac{\eta_t\cos\theta_i - \eta_i\cos\theta_t}{\eta_t\cos\theta_i + \eta_i\cos\theta_t}\\
+    r_{\perp} &= \frac{\eta_i\cos\theta_i - \eta_t\cos\theta_t}{\eta_i\cos\theta_i + \eta_t\cos\theta_t}
+  \end{align*}
+  For unpolarized light, the reflectance is $F_r = \left[r_{\|}^2 + r_{\perp}^2\right]/2$.
+
+  Total internal reflection (TIR) occurs when 
+  light travels into a medium with a lower index of refraction.
+  None of the light at grazing angles will pass into the next medium,
+  the maximum angle at which this will occur being the critical angle.
+  The definition of sine implies TIR may be detected 
+  when the computed $\sin\theta_t \geq 1$.
+
+  For a complex IOR $\eta + ik$ we have 
+  \begin{align*}
+    r_{\perp} &= \frac{a^2+b^2 - 2a\cos\theta + \cos^2\theta}{a^2+b^2 + 2a\cos\theta + \cos^2\theta}\\
+    r_{\|} &= r_{\perp}\frac{\cos^2\theta(a^2+b^2)-2a\cos\theta\sin^2\theta + \sin^4\theta}{\cos^2\theta(a^2+b^2) +2a\cos\theta\sin^2\theta + \sin^4\theta}\\
+    a^2 + b^2 &= \sqrt{(\eta^2 - k^2 - \sin^2\theta)^2 + 4\eta^2k^2}
+  \end{align*}
+  where $\eta+ik = \frac{\eta_t + k_t}{\eta_i + k_i}$.
+  Thus the specular BRDF 
+  is $f_r(\omega_o,\omega_i) = \delta(\omega_i-\omega_r)\frac{F_r(\omega_i)}{|\cos\theta_r|}$.
+  Conversely,
+  the specular BTDF is 
+  $f_r(\omega_o,\omega_i) = \frac{\eta_o^2}{\eta_i^2}(1-F_r(\omega_i))
+  \frac{\delta(\omega_i-T(\omega_o, \bm{n}))}{|\cos\theta_i|}$.
+  Where $T$ denotes the specular transmission vector.
+
+  \subsection{Microfacet BRDF}
+  The microfacet BRDF model 
+  assumes that any surface consists of 
+  perfectly specular ``microfacets'' 
+  of differential area.
+  Let $dA$ denote a differential patch of macrosurface area.
+  Let $\omega_m(p)$ denote 
+  the microfacet normal at $p$. 
+  We therefore expect the projection of the 
+  microsurface to cover the macrosurface:
+  $\int_{dA}(\omega_m(p)\cdot \bm{n})\,dp = \int_{dA}\,dp$
+  
+  Since we cannot expect to 
+  have an explicit $\omega_m$, 
+  it is productive to model the distribution of 
+  microfacets via a distribution function 
+  $D(\omega_m)$ that yields 
+  the relative differential area of microfacets with normal $\omega_m$,
+  where surface normals exist in TBN space.
+  The following normalization constraint follows from this 
+  concept:
+  $\int_{\Omega} D(\omega_m)(\omega_m \cdot \bm{n})\,d\omega_m = 1$.
+  The anisotrophic GGX (Trowbridge-Reitz) distribution is
+  \begin{align*}
+    D(\omega_m) = \frac{1}{\pi\alpha_x\alpha_y\cos^4\theta_m
+    \left(1+\tan^2\theta_m\left(\frac{\cos^2\phi_m}{\alpha_x^2} + \frac{\sin^2\phi_m}{\alpha_y^2}\right)\right)^2}
+  \end{align*}
+  When $\alpha_x = \alpha_y$, the distribution becomes isotrophic:
+  \begin{align*}
+    D^\ast(\omega_m) &= \frac{1}
+    {\pi\alpha^2\cos^4\theta_m\left(1+\frac{1}{\alpha^2}\tan^2\theta_m\right)^2}
+  \end{align*}
+
+  The masking function $G_1(\omega, \omega_m)$
+  accounts for occlusion of microfacets with normal $\omega_m$ by other microfacets 
+  from a viewing angle $\omega$. This ensures 
+  energy conservation:
+  \begin{align*}
+    \int_{\Omega} D(\omega_m)G_1(\omega, \omega_m)\max(0, \omega \cdot \omega_m)\,d\omega_m = \omega \cdot \bm{n} = \cos\theta
+  \end{align*}
+  Smith's approximation operates under the assumption 
+  heights and normals of points on the surface are 
+  independently distributed (intuitively,
+  we wouldn't expect this to be very representative of reality).
+  Then 
+  \begin{align*}
+    G_1(\omega) = \frac{\cos\theta}{\int_{\Omega} D(\omega_m)\max(0, \omega \cdot \omega_m)\,d\omega_m}
+  \end{align*}
+  which has an analytic solution for the GGX microfacet distribution:
+  $G_1(\omega) = \frac{1}{1 + \Lambda(\omega)}$, 
+  where 
+  \[ \Lambda(\omega) = \frac{\sqrt{1 + \alpha^2\tan^2\theta} - 1}{2} \]
+  But since the BSDF accepts two 
+  directional arguments, 
+  occlusion may occur in two directions,
+  resulting in masking \textit{and} shadowing.
+  The solution is a bidirectional generalization of 
+  the Smith approximation: $G(\omega_o, \omega_i) = \frac{1}{1 + \Lambda(\omega_o) + \Lambda(\omega_i)}$.
+
+  The Torrance-Sparrow microfacet BRDF 
+  is based on the previous two models:
+  \[f_r(\omega_o, \omega_i) = \frac{D(\omega_h)G(\omega_o, \omega_i)F_r(\omega_o)}{4\cos\theta_0\cos\theta_i}\]
+  where $\omega_h$ is the half-angle vector
 \end{document}
