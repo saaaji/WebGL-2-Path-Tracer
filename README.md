@@ -6,7 +6,7 @@ can view the results and accompanying article [here](https://github.com/saaaji/W
 
 An image produced by my renderer was selected for a monthly showcase on 
 the [Graphics Programming discord's](https://graphics-programming.org/) site.
-You can view it [here](https://graphics-programming.org/showcase-2021-12)! (under the name `@saaji#9697`)
+You can view it [here](https://graphics-programming.org/blog/showcase-2021-12)! (under the name `@saaji#9697`)
 
 ![Preview Image](https://user-images.githubusercontent.com/47622452/193398278-601ac33f-7ad9-49a9-ade4-b636312eead3.png)
 ## README Contents
@@ -86,4 +86,4 @@ As discussed in __[Usage](#usage)__, the renderer only accepts `hydra` files at 
  - Advanced Global Illumination, 2nd Edition
  - Real-Time Rendering, 4th Edition
 ## Gallery
-TBD
+![Bust](https://private-user-images.githubusercontent.com/47622452/411135951-015cfb1a-aa6b-4dbc-8c7a-760116ee96fe.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Mzg5ODc0OTAsIm5iZiI6MTczODk4NzE5MCwicGF0aCI6Ii80NzYyMjQ1Mi80MTExMzU5NTEtMDE1Y2ZiMWEtYWE2Yi00ZGJjLThjN2EtNzYwMTE2ZWU5NmZlLnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTAyMDglMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwMjA4VDAzNTk1MFomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWFlNTcxMmY5OWJjZTgxZGNmZWQ1ZjkyZTc0ODVlMjdhMGViYTM1MGY2NzVhODIwODI0ZmJkNTRlYTM0OTFjNDcmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.sozqoWGwFnA2sRmDa9HD9YDRXDRBQEiLOqtmGK-3qJg)
