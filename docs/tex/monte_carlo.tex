@@ -34,12 +34,12 @@
 
 \begin{document}
   \begin{center}
-    \section*{Monte Carlo Notes}
+    \section*{Notes on Monte Carlo}
   \end{center}
   
   The following are definitions and derivations that 
-  are explicitly written down with the hope that 
-  they will help guide the ray tracer implementation.
+  are explicitly written down with an extent of rigor
+  that I personally find useful as it regards the implementation.
 
   \section{Monte Carlo Estimator}
 
@@ -171,123 +171,5 @@
       L_i(x\gets \bm{\Psi})|\bm{N_x}\cdot\bm{\Psi}|\,d\omega_{\bm{\Psi}}
     \end{align*}
     where $L_i$ is reflected radiance from the incoming direction $\bm{\Psi}$.
-  \section{BxDF Models}
-  \subsection{Lambertian BRDF}
-  The Lambertian diffuse model requires 
-  just a reflectance spectrum $\bm{C}$ and 
-  is weighted by a normalization factor $1/\pi$:
-  $f_r = \frac{\bm{C}}{\pi}$.
-  It suffices to sample the cosine term of the rendering equation.
-  \subsection{Specular BxDF}
-  Specular reflection and transmission is similarly simple,
-  operating under the assumption that 
-  $\theta_i = \theta_o$ for reflections.
-  Transmissions abide by 
-  Snell's law, 
-  which states that given 
-  indices of refraction $\eta_i$ and $\eta_t$,
-  we have $\eta_i\sin\theta_i = \eta_t\sin\theta_t$.
-
-  The Fresnel equations describe the proportion of 
-  reflected and transmitted light at a surface and 
-  depend on the index of refraction and 
-  incident angle. 
-  Dielectrics have real-valued IORs while 
-  conductors have complex IORs.
-  This property of dielectrics yields 
-  the following reflectance 
-  formulae for 
-  parallel polarized light and 
-  perpendicular polarized light, respectively:
-  \begin{align*}
-    r_{\|} &= \frac{\eta_t\cos\theta_i - \eta_i\cos\theta_t}{\eta_t\cos\theta_i + \eta_i\cos\theta_t}\\
-    r_{\perp} &= \frac{\eta_i\cos\theta_i - \eta_t\cos\theta_t}{\eta_i\cos\theta_i + \eta_t\cos\theta_t}
-  \end{align*}
-  For unpolarized light, the reflectance is $F_r = \left[r_{\|}^2 + r_{\perp}^2\right]/2$.
-
-  Total internal reflection (TIR) occurs when 
-  light travels into a medium with a lower index of refraction.
-  None of the light at grazing angles will pass into the next medium,
-  the maximum angle at which this will occur being the critical angle.
-  The definition of sine implies TIR may be detected 
-  when the computed $\sin\theta_t \geq 1$.
-
-  For a complex IOR $\eta + ik$ we have 
-  \begin{align*}
-    r_{\perp} &= \frac{a^2+b^2 - 2a\cos\theta + \cos^2\theta}{a^2+b^2 + 2a\cos\theta + \cos^2\theta}\\
-    r_{\|} &= r_{\perp}\frac{\cos^2\theta(a^2+b^2)-2a\cos\theta\sin^2\theta + \sin^4\theta}{\cos^2\theta(a^2+b^2) +2a\cos\theta\sin^2\theta + \sin^4\theta}\\
-    a^2 + b^2 &= \sqrt{(\eta^2 - k^2 - \sin^2\theta)^2 + 4\eta^2k^2}
-  \end{align*}
-  where $\eta+ik = \frac{\eta_t + k_t}{\eta_i + k_i}$.
-  Thus the specular BRDF 
-  is $f_r(\omega_o,\omega_i) = \delta(\omega_i-\omega_r)\frac{F_r(\omega_i)}{|\cos\theta_r|}$.
-  Conversely,
-  the specular BTDF is 
-  $f_r(\omega_o,\omega_i) = \frac{\eta_o^2}{\eta_i^2}(1-F_r(\omega_i))
-  \frac{\delta(\omega_i-T(\omega_o, \bm{n}))}{|\cos\theta_i|}$.
-  Where $T$ denotes the specular transmission vector.
-
-  \subsection{Microfacet BRDF}
-  The microfacet BRDF model 
-  assumes that any surface consists of 
-  perfectly specular ``microfacets'' 
-  of differential area.
-  Let $dA$ denote a differential patch of macrosurface area.
-  Let $\omega_m(p)$ denote 
-  the microfacet normal at $p$. 
-  We therefore expect the projection of the 
-  microsurface to cover the macrosurface:
-  $\int_{dA}(\omega_m(p)\cdot \bm{n})\,dp = \int_{dA}\,dp$
-  
-  Since we cannot expect to 
-  have an explicit $\omega_m$, 
-  it is productive to model the distribution of 
-  microfacets via a distribution function 
-  $D(\omega_m)$ that yields 
-  the relative differential area of microfacets with normal $\omega_m$,
-  where surface normals exist in TBN space.
-  The following normalization constraint follows from this 
-  concept:
-  $\int_{\Omega} D(\omega_m)(\omega_m \cdot \bm{n})\,d\omega_m = 1$.
-  The anisotrophic GGX (Trowbridge-Reitz) distribution is
-  \begin{align*}
-    D(\omega_m) = \frac{1}{\pi\alpha_x\alpha_y\cos^4\theta_m
-    \left(1+\tan^2\theta_m\left(\frac{\cos^2\phi_m}{\alpha_x^2} + \frac{\sin^2\phi_m}{\alpha_y^2}\right)\right)^2}
-  \end{align*}
-  When $\alpha_x = \alpha_y$, the distribution becomes isotrophic:
-  \begin{align*}
-    D^\ast(\omega_m) &= \frac{1}
-    {\pi\alpha^2\cos^4\theta_m\left(1+\frac{1}{\alpha^2}\tan^2\theta_m\right)^2}
-  \end{align*}
-
-  The masking function $G_1(\omega, \omega_m)$
-  accounts for occlusion of microfacets with normal $\omega_m$ by other microfacets 
-  from a viewing angle $\omega$. This ensures 
-  energy conservation:
-  \begin{align*}
-    \int_{\Omega} D(\omega_m)G_1(\omega, \omega_m)\max(0, \omega \cdot \omega_m)\,d\omega_m = \omega \cdot \bm{n} = \cos\theta
-  \end{align*}
-  Smith's approximation operates under the assumption 
-  heights and normals of points on the surface are 
-  independently distributed (intuitively,
-  we wouldn't expect this to be very representative of reality).
-  Then 
-  \begin{align*}
-    G_1(\omega) = \frac{\cos\theta}{\int_{\Omega} D(\omega_m)\max(0, \omega \cdot \omega_m)\,d\omega_m}
-  \end{align*}
-  which has an analytic solution for the GGX microfacet distribution:
-  $G_1(\omega) = \frac{1}{1 + \Lambda(\omega)}$, 
-  where 
-  \[ \Lambda(\omega) = \frac{\sqrt{1 + \alpha^2\tan^2\theta} - 1}{2} \]
-  But since the BSDF accepts two 
-  directional arguments, 
-  occlusion may occur in two directions,
-  resulting in masking \textit{and} shadowing.
-  The solution is a bidirectional generalization of 
-  the Smith approximation: $G(\omega_o, \omega_i) = \frac{1}{1 + \Lambda(\omega_o) + \Lambda(\omega_i)}$.
-
-  The Torrance-Sparrow microfacet BRDF 
-  is based on the previous two models:
-  \[f_r(\omega_o, \omega_i) = \frac{D(\omega_h)G(\omega_o, \omega_i)F_r(\omega_o)}{4\cos\theta_0\cos\theta_i}\]
-  where $\omega_h$ is the half-angle vector
+    The light transport problem is suitable for Monte Carlo integration.
 \end{document}
