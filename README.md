@@ -6,7 +6,7 @@ can view the results and accompanying article [here](https://github.com/saaaji/W
 
 An image produced by my renderer was selected for a monthly showcase on 
 the [Graphics Programming discord's](https://graphics-programming.org/) site.
-You can view it [here](https://graphics-programming.org/showcase-2021-12)! (under the name `@saaji#9697`)
+You can view it [here](https://graphics-programming.org/blog/showcase-2021-12)! (under the name `@saaji#9697`)
 
 ![Preview Image](https://user-images.githubusercontent.com/47622452/193398278-601ac33f-7ad9-49a9-ade4-b636312eead3.png)
 ## README Contents
@@ -15,7 +15,7 @@ You can view it [here](https://graphics-programming.org/showcase-2021-12)! (unde
 3. [Usage](#usage)
 4. [Retrospective](#retrospective)
 5. [Resources](#resources)
-6. [Gallery](#gallery)
+
 ## Overview
 A path tracer generates photorealistic images given a scene description (i.e. a 3D model) as input; it simulates the propagation of light and its interactions with different surfaces, creating realistic results. I began working on this renderer during my sophomore year of high school, and expanded on it over time in painfully small increments; I originally envisioned it as a proof-of-concept implementation of *Ray Tracing in One Weekend* in JavaScript and WebGL, though it really became an outlet for me to implement different techniques as I learned more about the field of computer graphics. The end result may not necessarily be impressive or particularly performant, but it was and continues to be a very valuable "educational experiment" of sorts.
 ## Features
@@ -85,5 +85,3 @@ As discussed in __[Usage](#usage)__, the renderer only accepts `hydra` files at 
  - [PBR Book](https://pbr-book.org/)
  - Advanced Global Illumination, 2nd Edition
  - Real-Time Rendering, 4th Edition
-## Gallery
-TBD
