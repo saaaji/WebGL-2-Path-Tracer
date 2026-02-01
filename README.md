@@ -15,7 +15,7 @@ You can view it [here](https://graphics-programming.org/blog/showcase-2021-12)! 
 3. [Usage](#usage)
 4. [Retrospective](#retrospective)
 5. [Resources](#resources)
-6. [Gallery](#gallery)
+
 ## Overview
 A path tracer generates photorealistic images given a scene description (i.e. a 3D model) as input; it simulates the propagation of light and its interactions with different surfaces, creating realistic results. I began working on this renderer during my sophomore year of high school, and expanded on it over time in painfully small increments; I originally envisioned it as a proof-of-concept implementation of *Ray Tracing in One Weekend* in JavaScript and WebGL, though it really became an outlet for me to implement different techniques as I learned more about the field of computer graphics. The end result may not necessarily be impressive or particularly performant, but it was and continues to be a very valuable "educational experiment" of sorts.
 ## Features
