@@ -2,7 +2,7 @@
 ### A path tracer implemented in JavaScript using the WebGL 2 (& WebGPU) APIs
 I recently conducted a study of the performance of different ray tracing 
 acceleration structures on integrated GPUs for my scientific writing class. You 
-can view the results and accompanying article [here](https://github.com/saaaji/WebGL-2-Path-Tracer/blob/main/WRTG3030_MockAcademicArticle_RayTracingAcceleration.pdf).
+can view the results and accompanying article [here](https://github.com/saaaji/WebGL-2-Path-Tracer/blob/main/docs/WRTG3030_MockAcademicArticle_RayTracingAcceleration.pdf).
 
 An image produced by my renderer was selected for a monthly showcase on 
 the [Graphics Programming discord's](https://graphics-programming.org/) site.
